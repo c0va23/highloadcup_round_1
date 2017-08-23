@@ -4,4 +4,5 @@ version = "0.1.0"
 authors = ["Dmitrij Fedorenko <c0va23@gmail.com>"]
 
 [dependencies]
+futures = "0.1"
 hyper = "0.11"
