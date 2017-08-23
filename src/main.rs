@@ -9,6 +9,7 @@ use futures::{
     future,
 };
 
+mod models;
 
 struct Router;
 
