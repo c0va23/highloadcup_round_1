@@ -1,8 +1,7 @@
-use std::time;
+pub type Id = u32;
+pub type Timestamp = u64;
 
-type Id = u32;
-type Timestamp = u64;
-
+#[derive(Clone, Debug)]
 pub struct User {
     pub id: Id,
     pub email: String,
@@ -12,6 +11,7 @@ pub struct User {
     pub birth_date: Timestamp,
 }
 
+#[derive(Clone, Debug)]
 pub struct Location {
     pub id: Id,
     pub place: String,
@@ -20,6 +20,7 @@ pub struct Location {
     pub distance: u32,
 }
 
+#[derive(Clone, Debug)]
 pub struct Visit {
     pub id: Id,
     pub location: Id,
