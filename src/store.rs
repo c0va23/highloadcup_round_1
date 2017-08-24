@@ -8,6 +8,7 @@ use super::models::*;
 
 pub enum StoreError {
     EntryExists,
+    EntityNotExists,
     MutexPoisoned,
 }
 
@@ -32,9 +33,9 @@ impl Store {
         }
     }
 
-    pub fn get_user(&self, id: Id) -> Result<Option<User>, StoreError> {
+    pub fn get_user(&self, id: Id) -> Result<User, StoreError> {
         let users = self.users.lock()?;
-        Ok(users.get(&id).map(move |u| u.clone()))
+        users.get(&id).map(move |u| u.clone()).ok_or(StoreError::EntityNotExists)
     }
 
     pub fn add_user(&mut self, user: User) -> Result<(), StoreError> {
