@@ -18,11 +18,25 @@ use hyper::server;
 use futures::{
     Future,
     future,
+    Stream,
 };
 
 mod models;
 mod store;
 
+#[derive(Debug)]
+enum AppError {
+    JsonError(serde_json::Error),
+    StoreError(store::StoreError),
+}
+
+impl From<store::StoreError> for AppError {
+    fn from(err: store::StoreError) -> AppError {
+        AppError::StoreError(err)
+    }
+}
+
+#[derive(Clone)]
 struct Router {
     store: Arc<store::Store>,
 }
@@ -42,6 +56,17 @@ impl Router {
         future::ok(server::Response::new().with_status(hyper::StatusCode::InternalServerError)).boxed()
     }
 
+    fn app_error(err: AppError) -> server::Response {
+        match err {
+            AppError::JsonError(_) =>
+                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+            AppError::StoreError(store::StoreError::EntryExists) =>
+                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+            AppError::StoreError(_) =>
+                server::Response::new().with_status(hyper::StatusCode::InternalServerError),
+        }
+    }
+
     fn get_user(&self, id: u32) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         match self.store.get_user(id) {
             Ok(user) =>
@@ -53,6 +78,21 @@ impl Router {
             Err(_) => Self::internal_error(),
         }
     }
+
+    fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(req.body().concat2()
+            .and_then(move |chunk: hyper::Chunk|
+                serde_json::from_slice(&chunk)
+                    .map_err(AppError::JsonError)
+                    .and_then(|user| Ok(self.store.add_user(user)?))
+                    .map(|_| Ok(server::Response::new().with_body("{}")))
+                    .unwrap_or_else(|err| {
+                        error!("Request error: {:?}", err);
+                        Ok(Self::app_error(err))
+                    })
+            )
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -62,7 +102,8 @@ impl server::Service for Router {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        let mut path_parts = req.path().split('/').skip(1);
+        let path = req.path().to_string();
+        let mut path_parts = path.split('/').skip(1);
         match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(), path_parts.next()) {
             (_, _, _, _, Some(_)) => Self::not_found(),
             (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
@@ -70,6 +111,11 @@ impl server::Service for Router {
                     ("users", Ok(id)) => self.get_user(id),
                     _ => Self::not_found(),
                 }
+            (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>
+                match entity {
+                    "users" => self.clone().add_user(req),
+                    _ => Self::not_found(),
+                },
             _ => Self::not_found(),
         }
     }
