@@ -186,6 +186,22 @@ impl Router {
             )
         )
     }
+
+    fn update_visit(self, id: models::Id, req: server::Request) ->
+            Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(req.body().concat2()
+            .and_then(move |chunk: hyper::Chunk|
+                serde_json::from_slice(&chunk)
+                    .map_err(AppError::JsonError)
+                    .and_then(|visit_data| Ok(self.store.update_visit(id, visit_data)?))
+                    .map(|_| Ok(server::Response::new().with_body("{}")))
+                    .unwrap_or_else(|err| {
+                        error!("Request error: {:?}", err);
+                        Ok(Self::app_error(err))
+                    })
+            )
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -219,6 +235,7 @@ impl server::Service for Router {
                 match (entity, id_src.parse()) {
                     ("users", Ok(id)) => self.clone().update_user(id, req),
                     ("locations", Ok(id)) => self.clone().update_location(id, req),
+                    ("visits", Ok(id)) => self.clone().update_visit(id, req),
                     _ => Self::not_found(),
                 }
             _ => Self::not_found(),

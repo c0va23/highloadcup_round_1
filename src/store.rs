@@ -125,4 +125,26 @@ impl Store {
         visits.insert(visit.id, visit);
         Ok(())
     }
+
+    pub fn update_visit(&self, id: Id, visit_data: VisitData) -> Result<(), StoreError> {
+        let mut visits = self.visits.write()?;
+
+        if let Some(visit) = visits.get_mut(&id) {
+            if let Some(location) = visit_data.location {
+                visit.location = location;
+            }
+            if let Some(user) = visit_data.user {
+                visit.user = user;
+            }
+            if let Some(visited_at) = visit_data.visited_at {
+                visit.visited_at = visited_at;
+            }
+            if let Some(mark) = visit_data.mark {
+                visit.mark = mark;
+            }
+            Ok(())
+        } else {
+            Err(StoreError::EntityNotExists)
+        }
+    }
 }
