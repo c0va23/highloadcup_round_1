@@ -1,4 +1,4 @@
-use std::collections::btree_map::BTreeMap;
+use std::collections::HashMap;
 use std::sync::{
     RwLock,
     PoisonError,
@@ -20,7 +20,7 @@ impl<A> From<PoisonError<A>> for StoreError {
 }
 
 pub struct Store {
-    users: RwLock<BTreeMap<Id, User>>,
+    users: RwLock<HashMap<Id, User>>,
     // locations: Mutex<BTreeMap<Id, Location>>,
     // visits: Mutex<BTreeMap<Id, Visit>>,
 }
@@ -28,7 +28,7 @@ pub struct Store {
 impl Store {
     pub fn new() -> Self {
         Self {
-            users: RwLock::new(BTreeMap::new()),
+            users: RwLock::new(HashMap::new()),
             // locations: Mutex::new(BTreeMap::new()),
             // visits: Mutex::new(BTreeMap::new()),
         }
