@@ -8,6 +8,7 @@ extern crate serde_json;
 
 use std::env;
 use std::str;
+use std::sync::Arc;
 
 use hyper::server;
 use futures::{
@@ -18,12 +19,12 @@ use futures::{
 mod models;
 mod store;
 
-struct Router<'a> {
-    store: &'a store::Store,
+struct Router {
+    store: Arc<store::Store>,
 }
 
-impl<'a> Router<'a> {
-    fn new(store: &'a store::Store) -> Self {
+impl Router {
+    fn new(store: Arc<store::Store>) -> Self {
         Self {
             store: store,
         }
@@ -50,7 +51,7 @@ impl<'a> Router<'a> {
     }
 }
 
-impl<'a> server::Service for Router<'a> {
+impl server::Service for Router {
     type Request = server::Request;
     type Response = server::Response;
     type Error = hyper::Error;
@@ -75,8 +76,8 @@ const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 fn main() {
     let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
         .parse().unwrap();
-    let store = store::Store::new();
+    let store = Arc::new(store::Store::new());
     hyper::server::Http::new()
-        .bind(&address, move || Ok(Router::new(&store))).unwrap()
+        .bind(&address, move || Ok(Router::new(store.clone()))).unwrap()
         .run().unwrap()
 }
