@@ -6,6 +6,10 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
@@ -74,8 +78,12 @@ impl server::Service for Router {
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 
 fn main() {
+    env_logger::init().unwrap();
+
     let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
         .parse().unwrap();
+    info!("Start listen on {}", address);
+
     let store = Arc::new(store::Store::new());
     hyper::server::Http::new()
         .bind(&address, move || Ok(Router::new(store.clone()))).unwrap()
