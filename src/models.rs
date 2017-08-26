@@ -11,6 +11,15 @@ pub struct User {
     pub birth_date: Timestamp,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserData {
+    pub email: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub gender: Option<char>,
+    pub birth_date: Option<Timestamp>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Location {
     pub id: Id,

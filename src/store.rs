@@ -48,4 +48,28 @@ impl Store {
         users.insert(user.id, user);
         Ok(())
     }
+
+    pub fn update_user(&self, id: Id, user_data: UserData) -> Result<(), StoreError> {
+        let mut users = self.users.write()?;
+        if let Some(user) = users.get_mut(&id) {
+            if let Some(email) = user_data.email {
+                user.email = email;
+            }
+            if let Some(first_name) = user_data.first_name {
+                user.first_name = first_name;
+            }
+            if let Some(last_name) = user_data.last_name {
+                user.last_name = last_name;
+            }
+            if let Some(gender) = user_data.gender {
+                user.gender = gender;
+            }
+            if let Some(birth_date) = user_data.birth_date {
+                user.birth_date = birth_date;
+            }
+            Ok(())
+        } else {
+            Err(StoreError::EntityNotExists)
+        }
+    }
 }

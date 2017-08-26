@@ -62,6 +62,8 @@ impl Router {
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntryExists) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
+            AppError::StoreError(store::StoreError::EntityNotExists) =>
+                server::Response::new().with_status(hyper::StatusCode::NotFound),
             AppError::StoreError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::InternalServerError),
         }
@@ -85,6 +87,21 @@ impl Router {
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|user| Ok(self.store.add_user(user)?))
+                    .map(|_| Ok(server::Response::new().with_body("{}")))
+                    .unwrap_or_else(|err| {
+                        error!("Request error: {:?}", err);
+                        Ok(Self::app_error(err))
+                    })
+            )
+        )
+    }
+
+    fn update_user(self, id: u32, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(req.body().concat2()
+            .and_then(move |chunk: hyper::Chunk|
+                serde_json::from_slice(&chunk)
+                    .map_err(AppError::JsonError)
+                    .and_then(|user| Ok(self.store.update_user(id, user)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
                     .unwrap_or_else(|err| {
                         error!("Request error: {:?}", err);
@@ -118,6 +135,11 @@ impl server::Service for Router {
                     "users" => self.clone().add_user(req),
                     _ => Self::not_found(),
                 },
+            (&hyper::Method::Post, Some(entity), Some(id_src), None, None) =>
+                match (entity, id_src.parse()) {
+                    ("users", Ok(id)) => self.clone().update_user(id, req),
+                    _ => Self::not_found(),
+                }
             _ => Self::not_found(),
         }.map(|response|
             response.with_header(
