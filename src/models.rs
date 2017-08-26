@@ -1,7 +1,7 @@
 pub type Id = u32;
 pub type Timestamp = u64;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: Id,
     pub email: String,
@@ -11,7 +11,7 @@ pub struct User {
     pub birth_date: Timestamp,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Location {
     pub id: Id,
     pub place: String,
@@ -20,7 +20,7 @@ pub struct Location {
     pub distance: u32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Visit {
     pub id: Id,
     pub location: Id,
