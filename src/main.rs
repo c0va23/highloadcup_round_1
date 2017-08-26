@@ -11,6 +11,7 @@ extern crate log;
 extern crate env_logger;
 
 extern crate net2;
+extern crate tokio_core;
 
 use std::env;
 use std::str;
