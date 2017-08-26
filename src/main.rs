@@ -104,7 +104,9 @@ impl server::Service for Router {
     fn call(&self, req: Self::Request) -> Self::Future {
         let path = req.path().to_string();
         let mut path_parts = path.split('/').skip(1);
-        match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(), path_parts.next()) {
+
+        let result = match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(),
+                path_parts.next()) {
             (_, _, _, _, Some(_)) => Self::not_found(),
             (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
                 match (entity, id_src.parse()) {
@@ -117,7 +119,15 @@ impl server::Service for Router {
                     _ => Self::not_found(),
                 },
             _ => Self::not_found(),
-        }
+        }.map(|response|
+            response.with_header(
+                hyper::header::Connection(
+                    vec!(hyper::header::ConnectionOption::KeepAlive)
+                )
+            )
+        );
+
+        Box::new(result)
     }
 }
 
