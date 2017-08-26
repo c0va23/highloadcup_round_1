@@ -29,6 +29,14 @@ pub struct Location {
     pub distance: u32,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct LocationData {
+    pub place: Option<String>,
+    pub country: Option<String>,
+    pub city: Option<String>,
+    pub distance: Option<u32>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Visit {
     pub id: Id,

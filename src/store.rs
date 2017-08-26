@@ -88,4 +88,25 @@ impl Store {
         locations.insert(location.id, location);
         Ok(())
     }
+
+    pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<(), StoreError> {
+        let mut locations = self.locations.write()?;
+        if let Some(location) = locations.get_mut(&id) {
+            if let Some(distance) = location_data.distance {
+                location.distance = distance;
+            }
+            if let Some(place) = location_data.place {
+                location.place = place;
+            }
+            if let Some(country) = location_data.country {
+                location.country = country;
+            }
+            if let Some(city) = location_data.city {
+                location.city = city;
+            }
+            Ok(())
+        } else {
+            Err(StoreError::EntityNotExists)
+        }
+    }
 }
