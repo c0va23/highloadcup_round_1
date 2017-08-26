@@ -10,6 +10,8 @@ extern crate serde_json;
 extern crate log;
 extern crate env_logger;
 
+extern crate net2;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
