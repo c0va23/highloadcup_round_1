@@ -16,6 +16,7 @@ extern crate tokio_core;
 use std::env;
 use std::str;
 use std::sync::Arc;
+use std::thread;
 
 use hyper::server;
 use futures::{
@@ -23,6 +24,8 @@ use futures::{
     future,
     Stream,
 };
+
+use net2::unix::UnixTcpBuilderExt;
 
 mod models;
 mod store;
@@ -157,16 +160,54 @@ impl server::Service for Router {
 }
 
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
+const DEFAULT_THREADS: &'static str = "1";
+const DEFAULT_BACKLOG: &'static str = "1024";
 
 fn main() {
     env_logger::init().unwrap();
 
     let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
         .parse().unwrap();
-    info!("Start listen on {}", address);
+    let thread_count = env::var("THREADS").unwrap_or(DEFAULT_THREADS.to_string())
+        .parse::<usize>().unwrap();
+    let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
+        .parse::<i32>().unwrap();
+
+    info!("Start listen {} on {} threads with backlog", address, thread_count);
 
     let store = Arc::new(store::Store::new());
-    hyper::server::Http::new()
-        .bind(&address, move || Ok(Router::new(store.clone()))).unwrap()
-        .run().unwrap()
+
+    let threads = (0..thread_count).map(move |thread_index|{
+        let store = store.clone();
+        thread::Builder::new()
+            .name(format!("Server {}", thread_index))
+            .spawn(move || {
+                info!("Start thread {}", thread_index);
+                let net_listener = net2::TcpBuilder::new_v4().unwrap()
+                    .reuse_port(true).unwrap()
+                    .bind(address).unwrap()
+                    .listen(backlog).unwrap();
+
+                let mut core = tokio_core::reactor::Core::new().unwrap();
+                let handle = core.handle();
+
+                let core_listener = tokio_core::net::TcpListener::from_listener(net_listener, &address, &handle).unwrap();
+
+                core.run(
+                    core_listener.incoming().for_each(move |(stream, socket_addr)| {
+                        info!("Connection on thread #{} from {}", thread_index, socket_addr);
+                        hyper::server::Http::new()
+                            .keep_alive(true)
+                            .bind_connection(&handle, stream, socket_addr, Router::new(store.clone()));
+                        Ok(())
+                    })
+                )
+            }).unwrap()
+    }).collect::<Vec<_>>();
+
+    for join_handler in threads {
+        if let Err(err) = join_handler.join() {
+            error!("Thread error {:?}", err);
+        }
+    }
 }
