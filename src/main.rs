@@ -7,6 +7,7 @@ extern crate serde_derive;
 extern crate serde_json;
 
 use std::env;
+use std::str;
 
 use hyper::server;
 use futures::{
@@ -21,36 +22,10 @@ struct Router<'a> {
     store: &'a store::Store,
 }
 
-struct PathParts<'a> {
-    entity: &'a str,
-    id: Option<u32>,
-    action: Option<&'a str>,
-}
-
 impl<'a> Router<'a> {
     fn new(store: &'a store::Store) -> Self {
         Self {
             store: store,
-        }
-    }
-
-    fn parse_path(path: &str) -> Result<PathParts, ()> {
-        let parts = path.split("/");
-        if 2 <= parts.clone().count() && parts.clone().count() <= 3 {
-            match parts.clone().nth(1).unwrap().parse() {
-                Ok(id) => Ok(PathParts{
-                    entity: parts.clone().nth(0).unwrap(),
-                    id: Some(id),
-                    action: parts.clone().nth(2),
-                }),
-                Err(_) => Ok(PathParts {
-                    entity: parts.clone().nth(0).unwrap(),
-                    id: None,
-                    action: parts.clone().nth(1),
-                }),
-            }
-        } else {
-            return Err(())
         }
     }
 
@@ -82,9 +57,14 @@ impl<'a> server::Service for Router<'a> {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        match (req.method(), Self::parse_path(req.path())) {
-            (&hyper::Method::Get, Ok(PathParts{ action: None, id: Some(id), entity: "users" })) =>
-                self.get_user(id),
+        let mut path_parts = req.path().split('/');
+        match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(), path_parts.next()) {
+            (_, _, _, _, Some(_)) => Self::not_found(),
+            (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
+                match (entity, id_src.parse()) {
+                    ("users", Ok(id)) => self.get_user(id),
+                    _ => Self::not_found(),
+                }
             _ => Self::not_found(),
         }
     }
