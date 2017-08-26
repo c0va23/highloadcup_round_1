@@ -42,6 +42,12 @@ impl From<store::StoreError> for AppError {
     }
 }
 
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> AppError {
+        AppError::JsonError(err)
+    }
+}
+
 #[derive(Clone)]
 struct Router {
     store: Arc<store::Store>,
@@ -116,6 +122,15 @@ impl Router {
             )
         )
     }
+
+    fn get_location(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(self.store.get_location(id)
+            .map_err(AppError::StoreError)
+            .and_then(|location| Ok(serde_json::to_string(&location)?))
+            .map(|json| future::ok(server::Response::new().with_body(json)))
+            .unwrap_or_else(|err| future::ok(Self::app_error(err)))
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -134,6 +149,7 @@ impl server::Service for Router {
             (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
                 match (entity, id_src.parse()) {
                     ("users", Ok(id)) => self.get_user(id),
+                    ("locations", Ok(id)) => self.get_location(id),
                     _ => Self::not_found(),
                 }
             (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>

@@ -21,15 +21,15 @@ impl<A> From<PoisonError<A>> for StoreError {
 
 pub struct Store {
     users: RwLock<HashMap<Id, User>>,
-    // locations: Mutex<BTreeMap<Id, Location>>,
-    // visits: Mutex<BTreeMap<Id, Visit>>,
+    locations: RwLock<HashMap<Id, Location>>,
+    // visits: RwLock<HashMap<Id, Visit>>,
 }
 
 impl Store {
     pub fn new() -> Self {
         Self {
             users: RwLock::new(HashMap::new()),
-            // locations: Mutex::new(BTreeMap::new()),
+            locations: RwLock::new(HashMap::new()),
             // visits: Mutex::new(BTreeMap::new()),
         }
     }
@@ -71,5 +71,12 @@ impl Store {
         } else {
             Err(StoreError::EntityNotExists)
         }
+    }
+
+    pub fn get_location(&self, id: Id) -> Result<Location, StoreError> {
+        let locations = self.locations.read()?;
+        locations.get(&id)
+            .map(|l| l.clone())
+            .ok_or(StoreError::EntityNotExists)
     }
 }
