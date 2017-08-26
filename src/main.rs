@@ -58,7 +58,7 @@ impl server::Service for Router {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        let mut path_parts = req.path().split('/');
+        let mut path_parts = req.path().split('/').skip(1);
         match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(), path_parts.next()) {
             (_, _, _, _, Some(_)) => Self::not_found(),
             (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
