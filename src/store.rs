@@ -116,4 +116,13 @@ impl Store {
             .map(move |u| u.clone())
             .ok_or(StoreError::EntityNotExists)
     }
+
+    pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
+        let mut visits = self.visits.write()?;
+        if let Some(_) = visits.get(&visit.id) {
+            return Err(StoreError::EntryExists)
+        }
+        visits.insert(visit.id, visit);
+        Ok(())
+    }
 }

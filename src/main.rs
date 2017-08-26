@@ -171,6 +171,21 @@ impl Router {
             .unwrap_or_else(|err| future::ok(Self::app_error(err)))
         )
     }
+
+    fn add_visit(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(req.body().concat2()
+            .and_then(move |chunk: hyper::Chunk|
+                serde_json::from_slice(&chunk)
+                    .map_err(AppError::JsonError)
+                    .and_then(|visit| Ok(self.store.add_visit(visit)?))
+                    .map(|_| Ok(server::Response::new().with_body("{}")))
+                    .unwrap_or_else(|err| {
+                        error!("Request error: {:?}", err);
+                        Ok(Self::app_error(err))
+                    })
+            )
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -197,6 +212,7 @@ impl server::Service for Router {
                 match entity {
                     "users" => self.clone().add_user(req),
                     "locations" => self.clone().add_location(req),
+                    "visits" => self.clone().add_visit(req),
                     _ => Self::not_found(),
                 },
             (&hyper::Method::Post, Some(entity), Some(id_src), None, None) =>
