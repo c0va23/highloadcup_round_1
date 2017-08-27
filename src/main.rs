@@ -100,30 +100,24 @@ impl Router {
 
     fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
-            .and_then(move |chunk: hyper::Chunk|
+            .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|user| Ok(self.store.add_user(user)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
 
     fn update_user(self, id: u32, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
-            .and_then(move |chunk: hyper::Chunk|
+            .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|user| Ok(self.store.update_user(id, user)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
@@ -139,15 +133,12 @@ impl Router {
 
     fn add_location(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
-            .and_then(move |chunk: hyper::Chunk|
+            .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|location| Ok(self.store.add_location(location)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
@@ -155,15 +146,12 @@ impl Router {
     fn update_location(self, id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
-            .and_then(move |chunk: hyper::Chunk|
+            .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|user| Ok(self.store.update_location(id, user)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
@@ -179,15 +167,12 @@ impl Router {
 
     fn add_visit(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
-            .and_then(move |chunk: hyper::Chunk|
+            .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
                     .and_then(|visit| Ok(self.store.add_visit(visit)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
@@ -200,10 +185,7 @@ impl Router {
                     .map_err(AppError::JsonError)
                     .and_then(|visit_data| Ok(self.store.update_visit(id, visit_data)?))
                     .map(|_| Ok(server::Response::new().with_body("{}")))
-                    .unwrap_or_else(|err| {
-                        error!("Request error: {:?}", err);
-                        Ok(Self::app_error(err))
-                    })
+                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
         )
     }
