@@ -130,7 +130,7 @@ impl Store {
             return Err(StoreError::EntryExists)
         }
         let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
-        user_visit_ids.push_back(visit.user);
+        user_visit_ids.push_back(visit.id);
         visits.insert(visit.id, visit);
         Ok(())
     }
@@ -185,14 +185,18 @@ impl Store {
                 && if let Some(to_distance) = options.to_distance { l.distance < to_distance  } else { true }
             );
 
+        let mut user_visits = visit_location_pairs
+            .map(|(v, l)| UserVisit {
+                mark: v.mark,
+                place: l.place,
+                visited_at: v.visited_at,
+            })
+            .collect::<Vec<UserVisit>>();
+
+        user_visits.sort_by(|l, r| l.visited_at.cmp(&r.visited_at));
+
         Ok(UserVisits {
-            visits: visit_location_pairs
-                .map(|(v, l)| UserVisit {
-                    mark: v.mark,
-                    place: l.place,
-                    visited_at: v.visited_at,
-                })
-                .collect()
+            visits: user_visits,
         })
     }
 }
