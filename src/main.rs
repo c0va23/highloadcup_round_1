@@ -73,10 +73,6 @@ impl Router {
         future::ok(server::Response::new().with_status(hyper::StatusCode::NotFound)).boxed()
     }
 
-    fn internal_error() -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        future::ok(server::Response::new().with_status(hyper::StatusCode::InternalServerError)).boxed()
-    }
-
     fn app_error(err: AppError) -> server::Response {
         error!("{:?}", err);
         match err {
@@ -94,15 +90,12 @@ impl Router {
     }
 
     fn get_user(&self, id: u32) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        match self.store.get_user(id) {
-            Ok(user) =>
-                match serde_json::to_string(&user) {
-                    Ok(json) => future::ok(server::Response::new().with_body(json.to_string())).boxed(),
-                    Err(_) => Self::internal_error(),
-                },
-            Err(store::StoreError::EntryExists) => Self::not_found(),
-            Err(_) => Self::internal_error(),
-        }
+        Box::new(self.store.get_user(id)
+            .map_err(AppError::StoreError)
+            .and_then(|user| Ok(serde_json::to_string(&user)?))
+            .map(|json| future::ok(server::Response::new().with_body(json)))
+            .unwrap_or_else(|err| future::ok(Self::app_error(err)))
+        )
     }
 
     fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
