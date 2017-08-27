@@ -218,11 +218,11 @@ impl server::Service for Router {
         let result = match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(),
                 path_parts.next()) {
             (_, _, _, _, Some(_)) => Self::not_found(),
-            (&hyper::Method::Get, Some(entity), Some(id_src), None, None) =>
-                match (entity, id_src.parse()) {
-                    ("users", Ok(id)) => self.get_user(id),
-                    ("locations", Ok(id)) => self.get_location(id),
-                    ("visits", Ok(id)) => self.get_visit(id),
+            (&hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
+                match (entity, id_src.parse(), action) {
+                    ("users", Ok(id), None) => self.get_user(id),
+                    ("locations", Ok(id), None) => self.get_location(id),
+                    ("visits", Ok(id), None) => self.get_visit(id),
                     _ => Self::not_found(),
                 }
             (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>
