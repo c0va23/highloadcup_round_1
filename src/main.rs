@@ -227,6 +227,19 @@ impl Router {
                 .unwrap_or_else(|err| future::ok(Self::app_error(err)))
         )
     }
+
+    fn get_location_rating(&self, user_id: models::Id, req: server::Request) ->
+            Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            req.query().or(Some(""))
+                .ok_or(AppError::ParamsMissed) // TODO: Remove it
+                .and_then(|query| Ok(serde_urlencoded::from_str(query)?))
+                .and_then(|options| Ok(self.store.get_location_rating(user_id, options)?))
+                .and_then(|location_rating| Ok(serde_json::to_string(&location_rating)?))
+                .map(|json| future::ok(server::Response::new().with_body(json)))
+                .unwrap_or_else(|err| future::ok(Self::app_error(err)))
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -247,6 +260,7 @@ impl server::Service for Router {
                     ("users", Ok(id), None) => self.get_user(id),
                     ("users", Ok(id), Some("visits")) => self.find_user_visits(id, req),
                     ("locations", Ok(id), None) => self.get_location(id),
+                    ("locations", Ok(id), Some("avg")) => self.get_location_rating(id, req),
                     ("visits", Ok(id), None) => self.get_visit(id),
                     _ => Self::not_found(),
                 }

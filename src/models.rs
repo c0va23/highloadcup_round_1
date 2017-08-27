@@ -73,3 +73,18 @@ pub struct UserVisit {
 pub struct UserVisits {
     pub visits: Vec<UserVisit>
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationRateOptions {
+    pub from_date: Option<Timestamp>,
+    pub to_date: Option<Timestamp>,
+    pub from_age: Option<u32>,
+    pub to_age: Option<u32>,
+    pub gender: Option<char>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LocationRate {
+    pub avg: f64,
+}

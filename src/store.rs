@@ -28,6 +28,7 @@ pub struct Store {
     locations: RwLock<HashMap<Id, Location>>,
     visits: RwLock<HashMap<Id, Visit>>,
     user_visits: RwLock<HashMap<Id, LinkedList<Id>>>,
+    location_visits: RwLock<HashMap<Id, LinkedList<Id>>>,
 }
 
 impl Store {
@@ -37,6 +38,7 @@ impl Store {
             locations: RwLock::new(HashMap::new()),
             visits: RwLock::new(HashMap::new()),
             user_visits: RwLock::new(HashMap::new()),
+            location_visits: RwLock::new(HashMap::new()),
         }
     }
 
@@ -125,12 +127,20 @@ impl Store {
 
     pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
         let mut visits = self.visits.write()?;
+        // TODO: Move user_visits after visit exist checking (not block if visit already exists)
         let mut user_visits = self.user_visits.write()?;
+
         if let Some(_) = visits.get(&visit.id) {
             return Err(StoreError::EntryExists)
         }
+
         let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
         user_visit_ids.push_back(visit.id);
+
+        let mut location_visits = self.location_visits.write()?;
+        let location_visit_ids = location_visits.entry(visit.location).or_insert(LinkedList::new());
+        location_visit_ids.push_back(visit.id);
+
         visits.insert(visit.id, visit);
         Ok(())
     }
@@ -197,6 +207,43 @@ impl Store {
 
         Ok(UserVisits {
             visits: user_visits,
+        })
+    }
+
+    pub fn get_location_rating(&self, user_id: Id, options: LocationRateOptions) ->
+            Result<LocationRate, StoreError> {
+        debug!("Find user {} visits by {:?}", user_id, options);
+        let users = self.users.read()?;
+        if users.get(&user_id).is_none() {
+            return Err(StoreError::EntityNotExists)
+        }
+
+        let location_visit_ids = match self.location_visits.read()?.get(&user_id) {
+            Some(ids) => ids.clone(),
+            None => return Err(StoreError::EntityNotExists)
+        };
+
+        let visits = self.visits.read()?;
+
+        let sum_mark = location_visit_ids
+            .iter()
+            .map(|vid| {
+                let visit = visits.get(vid);
+                let user = visit.and_then(|v| users.get(&v.user));
+                match (visit, user) {
+                    (Some(visit), Some(user)) => Ok((visit.clone(), user.clone())),
+                    _ => Err(StoreError::BrokenData)
+                }
+            })
+            .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
+            .iter()
+            .fold(0, |sum, &(ref v, ref _u)| sum + v.mark)
+        ;
+
+        let avg_mark = sum_mark as f64 / location_visit_ids.len() as f64;
+
+        Ok(LocationRate {
+            avg: avg_mark,
         })
     }
 }
