@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{
+    LinkedList,
+    HashMap,
+};
 use std::sync::{
     RwLock,
     PoisonError,
@@ -11,6 +14,7 @@ pub enum StoreError {
     EntryExists,
     EntityNotExists,
     MutexPoisoned,
+    BrokenData,
 }
 
 impl<A> From<PoisonError<A>> for StoreError {
@@ -23,6 +27,7 @@ pub struct Store {
     users: RwLock<HashMap<Id, User>>,
     locations: RwLock<HashMap<Id, Location>>,
     visits: RwLock<HashMap<Id, Visit>>,
+    user_visits: RwLock<HashMap<Id, LinkedList<Id>>>,
 }
 
 impl Store {
@@ -31,6 +36,7 @@ impl Store {
             users: RwLock::new(HashMap::new()),
             locations: RwLock::new(HashMap::new()),
             visits: RwLock::new(HashMap::new()),
+            user_visits: RwLock::new(HashMap::new()),
         }
     }
 
@@ -119,9 +125,12 @@ impl Store {
 
     pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
         let mut visits = self.visits.write()?;
+        let mut user_visits = self.user_visits.write()?;
         if let Some(_) = visits.get(&visit.id) {
             return Err(StoreError::EntryExists)
         }
+        let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
+        user_visit_ids.push_back(visit.user);
         visits.insert(visit.id, visit);
         Ok(())
     }
@@ -130,12 +139,6 @@ impl Store {
         let mut visits = self.visits.write()?;
 
         if let Some(visit) = visits.get_mut(&id) {
-            if let Some(location) = visit_data.location {
-                visit.location = location;
-            }
-            if let Some(user) = visit_data.user {
-                visit.user = user;
-            }
             if let Some(visited_at) = visit_data.visited_at {
                 visit.visited_at = visited_at;
             }
@@ -146,5 +149,43 @@ impl Store {
         } else {
             Err(StoreError::EntityNotExists)
         }
+    }
+
+    pub fn find_user_visits(&self, user_id: Id, options: FindVisitOptions) ->
+            Result<UserVisits, StoreError> {
+        if self.users.read()?.get(&user_id).is_none() {
+            return Err(StoreError::EntityNotExists)
+        }
+
+        let locations = self.locations.read()?;
+        let visits = self.visits.read()?;
+
+        let user_visit_ids = match self.user_visits.read()?.get(&user_id) {
+            Some(user_visit_ids) => user_visit_ids.clone(),
+            None => return Ok(UserVisits::default()),
+        };
+
+        let visit_location_pairs = user_visit_ids
+            .iter()
+            .map(|vid| {
+                let v = visits.get(vid);
+                let l = v.and_then(|v| locations.get(&v.location));
+                match (v, l) {
+                    (Some(v), Some(l)) => Ok((v.clone(), l.clone())),
+                    _ => Err(StoreError::BrokenData),
+                }
+            })
+            .collect::<Result<Vec<(Visit, Location)>, StoreError>>()?;
+
+        Ok(UserVisits {
+            visits: visit_location_pairs
+                .into_iter()
+                .map(|(v, l)| UserVisit {
+                    mark: v.mark,
+                    place: l.place,
+                    visited_at: v.visited_at,
+                })
+                .collect()
+        })
     }
 }

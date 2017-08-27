@@ -35,6 +35,8 @@ mod store;
 enum AppError {
     JsonError(serde_json::Error),
     StoreError(store::StoreError),
+    ParamsError(serde_urlencoded::de::Error),
+    ParamsMissed,
 }
 
 impl From<store::StoreError> for AppError {
@@ -46,6 +48,12 @@ impl From<store::StoreError> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> AppError {
         AppError::JsonError(err)
+    }
+}
+
+impl From<serde_urlencoded::de::Error> for AppError {
+    fn from(err: serde_urlencoded::de::Error) -> AppError {
+        AppError::ParamsError(err)
     }
 }
 
@@ -70,10 +78,13 @@ impl Router {
     }
 
     fn app_error(err: AppError) -> server::Response {
+        error!("{:?}", err);
         match err {
             AppError::JsonError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntryExists) =>
+                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+            AppError::ParamsMissed | AppError::ParamsError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntityNotExists) =>
                 server::Response::new().with_status(hyper::StatusCode::NotFound),
@@ -203,6 +214,19 @@ impl Router {
             )
         )
     }
+
+    fn find_user_visits(&self, user_id: models::Id, req: server::Request) ->
+            Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            req.query()
+                .ok_or(AppError::ParamsMissed)
+                .and_then(|query| Ok(serde_urlencoded::from_str(query)?))
+                .and_then(|options| Ok(self.store.find_user_visits(user_id, options)?))
+                .and_then(|user_visits| Ok(serde_json::to_string(&user_visits)?))
+                .map(|json| future::ok(server::Response::new().with_body(json)))
+                .unwrap_or_else(|err| future::ok(Self::app_error(err)))
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -221,6 +245,7 @@ impl server::Service for Router {
             (&hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
                 match (entity, id_src.parse(), action) {
                     ("users", Ok(id), None) => self.get_user(id),
+                    ("users", Ok(id), Some("visits")) => self.find_user_visits(id, req),
                     ("locations", Ok(id), None) => self.get_location(id),
                     ("visits", Ok(id), None) => self.get_visit(id),
                     _ => Self::not_found(),

@@ -1,5 +1,6 @@
 pub type Id = u32;
 pub type Timestamp = u64;
+pub type Mark = u8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
@@ -48,8 +49,27 @@ pub struct Visit {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct VisitData {
-    pub location: Option<Id>,
-    pub user: Option<Id>,
     pub visited_at: Option<Timestamp>,
     pub mark: Option<u8>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FindVisitOptions {
+    pub from_date: Option<Timestamp>,
+    pub to_date: Option<Timestamp>,
+    pub country: Option<String>,
+    pub to_distance: Option<u32>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UserVisit {
+    pub mark: Mark,
+    pub visited_at: Timestamp,
+    pub place: String,
+}
+
+#[derive(Clone, Debug, Serialize, Default)]
+pub struct UserVisits {
+    pub visits: Vec<UserVisit>
 }
