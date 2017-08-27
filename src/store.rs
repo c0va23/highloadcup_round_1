@@ -153,6 +153,7 @@ impl Store {
 
     pub fn find_user_visits(&self, user_id: Id, options: FindVisitOptions) ->
             Result<UserVisits, StoreError> {
+        debug!("Find user {} visits by {:?}", user_id, options);
         if self.users.read()?.get(&user_id).is_none() {
             return Err(StoreError::EntityNotExists)
         }
@@ -175,11 +176,17 @@ impl Store {
                     _ => Err(StoreError::BrokenData),
                 }
             })
-            .collect::<Result<Vec<(Visit, Location)>, StoreError>>()?;
+            .collect::<Result<Vec<(Visit, Location)>, StoreError>>()?
+            .into_iter()
+            .filter(|&(ref v, ref l)|
+                if let Some(from_date) = options.from_date { from_date < v.visited_at  } else { true }
+                && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
+                && if let Some(ref country) = options.country { &l.country == country } else { true }
+                && if let Some(to_distance) = options.to_distance { l.distance < to_distance  } else { true }
+            );
 
         Ok(UserVisits {
             visits: visit_location_pairs
-                .into_iter()
                 .map(|(v, l)| UserVisit {
                     mark: v.mark,
                     place: l.place,
