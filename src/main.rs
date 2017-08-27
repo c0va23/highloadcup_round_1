@@ -218,8 +218,8 @@ impl Router {
     fn find_user_visits(&self, user_id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            req.query()
-                .ok_or(AppError::ParamsMissed)
+            req.query().or(Some(""))
+                .ok_or(AppError::ParamsMissed) // TODO: Remove it
                 .and_then(|query| Ok(serde_urlencoded::from_str(query)?))
                 .and_then(|options| Ok(self.store.find_user_visits(user_id, options)?))
                 .and_then(|user_visits| Ok(serde_json::to_string(&user_visits)?))
