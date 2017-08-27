@@ -9,6 +9,9 @@ use std::sync::{
 
 use super::models::*;
 
+const YAER_DURATION: Timestamp = 365 * 24 * 60 * 60;
+const AVG_ACCURACY: f64 = 5.0_f64;
+
 #[derive(Debug)]
 pub enum StoreError {
     EntryExists,
@@ -225,7 +228,7 @@ impl Store {
 
         let visits = self.visits.read()?;
 
-        let sum_mark = location_visit_ids
+        let (sum_mark, count_mark) = location_visit_ids
             .iter()
             .map(|vid| {
                 let visit = visits.get(vid);
@@ -236,11 +239,22 @@ impl Store {
                 }
             })
             .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
-            .iter()
-            .fold(0, |sum, &(ref v, ref _u)| sum + v.mark)
-        ;
+            .into_iter()
+            .filter(|&(ref v, ref u)|
+                if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true }
+                && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
+                && if let Some(gender) = options.gender { u.gender == gender } else { true }
+                && if let Some(from_age) = options.from_age { u.birth_date > (YAER_DURATION * from_age as u64) } else { true }
+                && if let Some(to_age) = options.to_age { u.birth_date < (YAER_DURATION * to_age as u64) } else { true }
+            )
+            .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
-        let avg_mark = sum_mark as f64 / location_visit_ids.len() as f64;
+        if 0 == count_mark {
+            return Err(StoreError::EntityNotExists)
+        }
+
+        let delimiter = 10_f64.powf(AVG_ACCURACY);
+        let avg_mark = ((sum_mark as f64 / count_mark as f64) * delimiter).round() / delimiter;
 
         Ok(LocationRate {
             avg: avg_mark,
