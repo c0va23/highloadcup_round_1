@@ -1,5 +1,5 @@
 pub type Id = u32;
-pub type Timestamp = u64;
+pub type Timestamp = i64;
 pub type Mark = u8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
