@@ -1,5 +1,4 @@
 use std::collections::{
-    LinkedList,
     HashMap,
 };
 use std::sync::{
@@ -31,8 +30,8 @@ pub struct Store {
     users: RwLock<HashMap<Id, User>>,
     locations: RwLock<HashMap<Id, Location>>,
     visits: RwLock<HashMap<Id, Visit>>,
-    user_visits: RwLock<HashMap<Id, LinkedList<Id>>>,
-    location_visits: RwLock<HashMap<Id, LinkedList<Id>>>,
+    user_visits: RwLock<HashMap<Id, Vec<Id>>>,
+    location_visits: RwLock<HashMap<Id, Vec<Id>>>,
 }
 
 impl Store {
@@ -148,14 +147,14 @@ impl Store {
             .ok_or(StoreError::EntityNotExists)
     }
 
-    fn add_visit_to_user(user_visits: &mut HashMap<Id, LinkedList<Id>>, visit: &Visit) {
-        let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
-        user_visit_ids.push_back(visit.id);
+    fn add_visit_to_user(user_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+        let user_visit_ids = user_visits.entry(visit.user).or_insert(Vec::new());
+        user_visit_ids.push(visit.id);
     }
 
-    fn add_visit_to_location(location_visits: &mut HashMap<Id, LinkedList<Id>>, visit: &Visit) {
-        let location_visit_ids = location_visits.entry(visit.location).or_insert(LinkedList::new());
-        location_visit_ids.push_back(visit.id);
+    fn add_visit_to_location(location_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+        let location_visit_ids = location_visits.entry(visit.location).or_insert(Vec::new());
+        location_visit_ids.push(visit.id);
     }
 
     pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
