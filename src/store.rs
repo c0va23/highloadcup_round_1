@@ -148,10 +148,18 @@ impl Store {
             .ok_or(StoreError::EntityNotExists)
     }
 
+    fn add_visit_to_user(user_visits: &mut HashMap<Id, LinkedList<Id>>, visit: &Visit) {
+        let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
+        user_visit_ids.push_back(visit.id);
+    }
+
+    fn add_visit_to_location(location_visits: &mut HashMap<Id, LinkedList<Id>>, visit: &Visit) {
+        let location_visit_ids = location_visits.entry(visit.location).or_insert(LinkedList::new());
+        location_visit_ids.push_back(visit.id);
+    }
+
     pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
         let mut visits = self.visits.write()?;
-        // TODO: Move user_visits after visit exist checking (not block if visit already exists)
-        let mut user_visits = self.user_visits.write()?;
 
         if let Some(_) = visits.get(&visit.id) {
             return Err(StoreError::EntryExists)
@@ -161,12 +169,11 @@ impl Store {
             return Err(StoreError::InvalidEntity)
         }
 
-        let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
-        user_visit_ids.push_back(visit.id);
+        let mut user_visits = self.user_visits.write()?;
+        Self::add_visit_to_user(&mut user_visits, &visit);
 
         let mut location_visits = self.location_visits.write()?;
-        let location_visit_ids = location_visits.entry(visit.location).or_insert(LinkedList::new());
-        location_visit_ids.push_back(visit.id);
+        Self::add_visit_to_location(&mut location_visits, &visit);
 
         visits.insert(visit.id, visit);
         Ok(())
