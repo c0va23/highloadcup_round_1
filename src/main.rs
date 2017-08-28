@@ -14,6 +14,8 @@ extern crate env_logger;
 extern crate net2;
 extern crate tokio_core;
 
+extern crate zip;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
