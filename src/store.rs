@@ -209,7 +209,7 @@ impl Store {
             if let Some(mark) = visit_data.mark {
                 updated_visit.mark = mark;
             }
-            if updated_visit.valid() {
+            if !updated_visit.valid() {
                 return Err(StoreError::InvalidEntity)
             }
             if visit.user != updated_visit.user {
