@@ -152,9 +152,23 @@ impl Store {
         user_visit_ids.push(visit.id);
     }
 
+    fn remove_visit_from_user(user_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+        let user_visit_ids = user_visits.entry(visit.user).or_insert(Vec::new());
+        if let Some(position) = user_visit_ids.iter().position(|id| *id == visit.id) {
+            user_visit_ids.remove(position);
+        }
+    }
+
     fn add_visit_to_location(location_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
         let location_visit_ids = location_visits.entry(visit.location).or_insert(Vec::new());
         location_visit_ids.push(visit.id);
+    }
+
+    fn remove_visit_from_location(location_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+        let location_visit_ids = location_visits.entry(visit.location).or_insert(Vec::new());
+        if let Some(position) = location_visit_ids.iter().position(|id| *id == visit.id) {
+            location_visit_ids.remove(position);
+        }
     }
 
     pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
@@ -197,9 +211,18 @@ impl Store {
             }
             if updated_visit.valid() {
                 return Err(StoreError::InvalidEntity)
-            } else {
-                *visit = updated_visit;
             }
+            if visit.user != updated_visit.user {
+                let mut user_visits = self.user_visits.write()?;
+                Self::remove_visit_from_user(&mut user_visits, &visit);
+                Self::add_visit_to_user(&mut user_visits, &updated_visit);
+            }
+            if visit.location != updated_visit.location {
+                let mut location_visits = self.location_visits.write()?;
+                Self::remove_visit_from_location(&mut location_visits, &visit);
+                Self::add_visit_to_location(&mut location_visits, &updated_visit);
+            }
+            *visit = updated_visit;
             Ok(())
         } else {
             Err(StoreError::EntityNotExists)
