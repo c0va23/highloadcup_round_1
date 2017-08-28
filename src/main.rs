@@ -34,6 +34,7 @@ use net2::unix::UnixTcpBuilderExt;
 
 mod models;
 mod store;
+mod loader;
 
 #[derive(Debug)]
 enum AppError {
@@ -343,10 +344,13 @@ fn main() {
         .parse::<usize>().unwrap();
     let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
         .parse::<i32>().unwrap();
+    let data_path = env::var("DATA_PATH").unwrap();
 
     info!("Start listen {} on {} threads with backlog", address, thread_count);
 
     let store = Arc::new(store::Store::new());
+
+    loader::load_data(store.clone(), &data_path).unwrap();
 
     let threads = (0..thread_count).map(move |thread_index|{
         let store = store.clone();
