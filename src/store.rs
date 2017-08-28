@@ -18,6 +18,7 @@ pub enum StoreError {
     EntityNotExists,
     MutexPoisoned,
     BrokenData,
+    InvalidEntity,
 }
 
 impl<A> From<PoisonError<A>> for StoreError {
@@ -56,6 +57,10 @@ impl Store {
             return Err(StoreError::EntryExists)
         }
 
+        if !user.valid() {
+            return Err(StoreError::InvalidEntity)
+        }
+
         users.insert(user.id, user);
         Ok(())
     }
@@ -63,20 +68,26 @@ impl Store {
     pub fn update_user(&self, id: Id, user_data: UserData) -> Result<(), StoreError> {
         let mut users = self.users.write()?;
         if let Some(user) = users.get_mut(&id) {
+            let mut updated_user = user.clone();
             if let Some(email) = user_data.email {
-                user.email = email;
+                updated_user.email = email;
             }
             if let Some(first_name) = user_data.first_name {
-                user.first_name = first_name;
+                updated_user.first_name = first_name;
             }
             if let Some(last_name) = user_data.last_name {
-                user.last_name = last_name;
+                updated_user.last_name = last_name;
             }
             if let Some(gender) = user_data.gender {
-                user.gender = gender;
+                updated_user.gender = gender;
             }
             if let Some(birth_date) = user_data.birth_date {
-                user.birth_date = birth_date;
+                updated_user.birth_date = birth_date;
+            }
+            if updated_user.valid() {
+                *user = updated_user
+            } else {
+                return Err(StoreError::InvalidEntity)
             }
             Ok(())
         } else {
@@ -96,6 +107,9 @@ impl Store {
         if let Some(_) = locations.get(&location.id) {
             return Err(StoreError::EntryExists)
         }
+        if !location.valid() {
+            return Err(StoreError::InvalidEntity)
+        }
         locations.insert(location.id, location);
         Ok(())
     }
@@ -103,17 +117,23 @@ impl Store {
     pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<(), StoreError> {
         let mut locations = self.locations.write()?;
         if let Some(location) = locations.get_mut(&id) {
+            let mut updated_location = location.clone();
             if let Some(distance) = location_data.distance {
-                location.distance = distance;
+                updated_location.distance = distance;
             }
             if let Some(place) = location_data.place {
-                location.place = place;
+                updated_location.place = place;
             }
             if let Some(country) = location_data.country {
-                location.country = country;
+                updated_location.country = country;
             }
             if let Some(city) = location_data.city {
-                location.city = city;
+                updated_location.city = city;
+            }
+            if updated_location.valid() {
+                *location = updated_location;
+            } else {
+                return Err(StoreError::InvalidEntity)
             }
             Ok(())
         } else {
@@ -137,6 +157,10 @@ impl Store {
             return Err(StoreError::EntryExists)
         }
 
+        if !visit.valid() {
+            return Err(StoreError::InvalidEntity)
+        }
+
         let user_visit_ids = user_visits.entry(visit.user).or_insert(LinkedList::new());
         user_visit_ids.push_back(visit.id);
 
@@ -152,11 +176,17 @@ impl Store {
         let mut visits = self.visits.write()?;
 
         if let Some(visit) = visits.get_mut(&id) {
+            let mut updated_visit = visit.clone();
             if let Some(visited_at) = visit_data.visited_at {
-                visit.visited_at = visited_at;
+                updated_visit.visited_at = visited_at;
             }
             if let Some(mark) = visit_data.mark {
-                visit.mark = mark;
+                updated_visit.mark = mark;
+            }
+            if updated_visit.valid() {
+                return Err(StoreError::InvalidEntity)
+            } else {
+                *visit = updated_visit;
             }
             Ok(())
         } else {

@@ -83,7 +83,8 @@ impl Router {
         match err {
             AppError::JsonError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
-            AppError::StoreError(store::StoreError::EntryExists) =>
+            AppError::StoreError(store::StoreError::EntryExists) |
+                    AppError::StoreError(store::StoreError::InvalidEntity) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::ParamsMissed | AppError::ParamsError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),

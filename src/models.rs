@@ -2,6 +2,10 @@ pub type Id = u32;
 pub type Timestamp = i64;
 pub type Mark = u8;
 
+pub trait Validate {
+    fn valid(&self) -> bool;
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: Id,
@@ -87,4 +91,26 @@ pub struct LocationRateOptions {
 #[derive(Clone, Debug, Serialize)]
 pub struct LocationRate {
     pub avg: f64,
+}
+
+impl Validate for User {
+    fn valid(&self) -> bool {
+        self.email.len() <= 100
+            && self.first_name.len() <= 50
+            && self.last_name.len() <= 50
+            && (self.gender == 'f' || self.gender == 'm')
+    }
+}
+
+impl Validate for Location {
+    fn valid(&self) -> bool {
+        self.country.len() <= 50
+            && self.city.len() <= 50
+    }
+}
+
+impl Validate for Visit {
+    fn valid(&self) -> bool {
+        self.mark <= 5
+    }
 }
