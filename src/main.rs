@@ -41,7 +41,6 @@ enum AppError {
     JsonError(serde_json::Error),
     StoreError(store::StoreError),
     ParamsError(serde_urlencoded::de::Error),
-    ParamsMissed,
     NullValue,
 }
 
@@ -88,7 +87,7 @@ impl Router {
                     AppError::StoreError(store::StoreError::InvalidEntity) |
                     AppError::NullValue =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
-            AppError::ParamsMissed | AppError::ParamsError(_) =>
+            AppError::ParamsError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntityNotExists) =>
                 server::Response::new().with_status(hyper::StatusCode::NotFound),
@@ -97,13 +96,12 @@ impl Router {
         }
     }
 
-    fn format_response<E>(result: Result<E, store::StoreError>) ->
+    fn format_response<E>(result: Result<E, AppError>) ->
         Box<Future<Item = server::Response, Error = hyper::Error>>
     where
         E: serde::ser::Serialize,
     {
         Box::new(result
-            .map_err(AppError::StoreError)
             .and_then(|user| Ok(serde_json::to_string(&user)?))
             .map(|json| {
                 let length = json.len() as u64;
@@ -114,6 +112,12 @@ impl Router {
             })
             .unwrap_or_else(|err| future::ok(Self::app_error(err)))
         )
+    }
+
+    fn parse_params<P>(query: Option<&str>) -> Result<P, AppError>
+    where P: serde::de::DeserializeOwned
+    {
+        Ok(serde_urlencoded::from_str(query.unwrap_or(""))?)
     }
 
     fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
@@ -267,44 +271,6 @@ impl Router {
             )
         )
     }
-
-    fn find_user_visits(&self, user_id: models::Id, req: server::Request) ->
-            Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(
-            req.query().or(Some(""))
-                .ok_or(AppError::ParamsMissed) // TODO: Remove it
-                .and_then(|query| Ok(serde_urlencoded::from_str(query)?))
-                .and_then(|options| Ok(self.store.find_user_visits(user_id, options)?))
-                .and_then(|user_visits| Ok(serde_json::to_string(&user_visits)?))
-                .map(|json| {
-                    let length = json.len() as u64;
-                    future::ok(server::Response::new().with_body(json)
-                        .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                        .with_header(hyper::header::ContentLength(length))
-                    )
-                })
-                .unwrap_or_else(|err| future::ok(Self::app_error(err)))
-        )
-    }
-
-    fn get_location_rating(&self, user_id: models::Id, req: server::Request) ->
-            Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(
-            req.query().or(Some(""))
-                .ok_or(AppError::ParamsMissed) // TODO: Remove it
-                .and_then(|query| Ok(serde_urlencoded::from_str(query)?))
-                .and_then(|options| Ok(self.store.get_location_rating(user_id, options)?))
-                .and_then(|location_rating| Ok(serde_json::to_string(&location_rating)?))
-                .map(|json| {
-                    let length = json.len() as u64;
-                    future::ok(server::Response::new().with_body(json)
-                        .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                        .with_header(hyper::header::ContentLength(length))
-                    )
-                })
-                .unwrap_or_else(|err| future::ok(Self::app_error(err)))
-        )
-    }
 }
 
 impl server::Service for Router {
@@ -322,11 +288,38 @@ impl server::Service for Router {
             (_, _, _, _, Some(_)) => Self::not_found(),
             (&hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
                 match (entity, id_src.parse(), action) {
-                    ("users", Ok(id), None) => Self::format_response(self.store.get_user(id)),
-                    ("users", Ok(id), Some("visits")) => self.find_user_visits(id, req),
-                    ("locations", Ok(id), None) => Self::format_response(self.store.get_location(id)),
-                    ("locations", Ok(id), Some("avg")) => self.get_location_rating(id, req),
-                    ("visits", Ok(id), None) => Self::format_response(self.store.get_visit(id)),
+                    ("users", Ok(id), None) =>
+                        Self::format_response(
+                            self.store.get_user(id)
+                                .map_err(AppError::StoreError)
+                        ),
+                    ("users", Ok(id), Some("visits")) =>
+                        Self::format_response(
+                            Self::parse_params(req.query())
+                                .and_then(|options|
+                                    self.store
+                                        .find_user_visits(id, options)
+                                        .map_err(AppError::StoreError)
+                                )
+                        ),
+                    ("locations", Ok(id), None) =>
+                        Self::format_response(
+                            self.store.get_location(id)
+                                .map_err(AppError::StoreError)
+                        ),
+                    ("locations", Ok(id), Some("avg")) =>
+                        Self::format_response(
+                            Self::parse_params(req.query())
+                                .and_then(|options|
+                                    self.store.get_location_rating(id, options)
+                                        .map_err(AppError::StoreError)
+                                )
+                        ),
+                    ("visits", Ok(id), None) =>
+                        Self::format_response(
+                            self.store.get_visit(id)
+                                .map_err(AppError::StoreError)
+                        ),
                     _ => Self::not_found(),
                 }
             (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>
