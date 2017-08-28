@@ -42,6 +42,7 @@ enum AppError {
     StoreError(store::StoreError),
     ParamsError(serde_urlencoded::de::Error),
     ParamsMissed,
+    NullValue,
 }
 
 impl From<store::StoreError> for AppError {
@@ -84,7 +85,8 @@ impl Router {
             AppError::JsonError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntryExists) |
-                    AppError::StoreError(store::StoreError::InvalidEntity) =>
+                    AppError::StoreError(store::StoreError::InvalidEntity) |
+                    AppError::NullValue =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::ParamsMissed | AppError::ParamsError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
@@ -115,6 +117,14 @@ impl Router {
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|user| Ok(self.store.add_user(user)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
@@ -132,6 +142,14 @@ impl Router {
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|user| Ok(self.store.update_user(id, user)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
@@ -164,6 +182,14 @@ impl Router {
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|location| Ok(self.store.add_location(location)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
@@ -182,6 +208,14 @@ impl Router {
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|user| Ok(self.store.update_location(id, user)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
@@ -214,6 +248,14 @@ impl Router {
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|visit| Ok(self.store.add_visit(visit)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
@@ -232,6 +274,14 @@ impl Router {
             .and_then(move |chunk: hyper::Chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
+                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
+                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+                            Err(AppError::NullValue)
+                        } else {
+                            Ok(serde_json::value::Value::Object(map))
+                        }
+                    )
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|visit_data| Ok(self.store.update_visit(id, visit_data)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
