@@ -53,6 +53,8 @@ pub struct Visit {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct VisitData {
+    pub location: Option<Id>,
+    pub user: Option<Id>,
     pub visited_at: Option<Timestamp>,
     pub mark: Option<u8>,
 }

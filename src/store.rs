@@ -184,6 +184,12 @@ impl Store {
 
         if let Some(visit) = visits.get_mut(&id) {
             let mut updated_visit = visit.clone();
+            if let Some(location) = visit_data.location {
+                updated_visit.location = location;
+            }
+            if let Some(user) = visit_data.user {
+                updated_visit.user = user;
+            }
             if let Some(visited_at) = visit_data.visited_at {
                 updated_visit.visited_at = visited_at;
             }
