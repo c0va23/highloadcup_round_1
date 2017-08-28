@@ -295,6 +295,7 @@ impl Store {
         let visits = self.visits.read()?;
 
         let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs() as Timestamp;
+        debug!("Now {}", now);
 
         let (sum_mark, count_mark) = location_visit_ids
             .iter()
@@ -310,6 +311,7 @@ impl Store {
             .into_iter()
             .filter(|&(ref v, ref u)| {
                 let user_age = now - u.birth_date;
+                debug!("User age {} ({})", user_age, user_age as f64 / YAER_DURATION as f64);
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
@@ -319,7 +321,9 @@ impl Store {
             .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
         if 0 == count_mark {
-            return Err(StoreError::EntityNotExists)
+            return Ok(LocationRate {
+                avg: 0_f64,
+            })
         }
 
         let delimiter = 10_f64.powf(AVG_ACCURACY);
