@@ -216,7 +216,7 @@ impl Router {
                         }
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|user| Ok(self.store.update_location(id, user)?))
+                    .and_then(|location_data| Ok(self.store.update_location(id, location_data)?))
                     .map(|_|
                         Ok(server::Response::new().with_body("{}")
                             .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
