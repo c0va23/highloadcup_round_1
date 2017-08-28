@@ -97,8 +97,12 @@ impl Router {
         }
     }
 
-    fn get_user(&self, id: u32) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.store.get_user(id)
+    fn format_response<E>(result: Result<E, store::StoreError>) ->
+        Box<Future<Item = server::Response, Error = hyper::Error>>
+    where
+        E: serde::ser::Serialize,
+    {
+        Box::new(result
             .map_err(AppError::StoreError)
             .and_then(|user| Ok(serde_json::to_string(&user)?))
             .map(|json| {
@@ -162,21 +166,6 @@ impl Router {
         )
     }
 
-    fn get_location(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.store.get_location(id)
-            .map_err(AppError::StoreError)
-            .and_then(|location| Ok(serde_json::to_string(&location)?))
-            .map(|json| {
-                let length = json.len() as u64;
-                future::ok(server::Response::new().with_body(json)
-                    .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                    .with_header(hyper::header::ContentLength(length))
-                )
-            })
-            .unwrap_or_else(|err| future::ok(Self::app_error(err)))
-        )
-    }
-
     fn add_location(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
             .and_then(move |chunk|
@@ -225,21 +214,6 @@ impl Router {
                     )
                     .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
-        )
-    }
-
-    fn get_visit(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.store.get_visit(id)
-            .map_err(AppError::StoreError)
-            .and_then(|visit| Ok(serde_json::to_string(&visit)?))
-            .map(|json| {
-                let length = json.len() as u64;
-                future::ok(server::Response::new().with_body(json)
-                    .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                    .with_header(hyper::header::ContentLength(length))
-                )
-            })
-            .unwrap_or_else(|err| future::ok(Self::app_error(err)))
         )
     }
 
@@ -348,11 +322,11 @@ impl server::Service for Router {
             (_, _, _, _, Some(_)) => Self::not_found(),
             (&hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
                 match (entity, id_src.parse(), action) {
-                    ("users", Ok(id), None) => self.get_user(id),
+                    ("users", Ok(id), None) => Self::format_response(self.store.get_user(id)),
                     ("users", Ok(id), Some("visits")) => self.find_user_visits(id, req),
-                    ("locations", Ok(id), None) => self.get_location(id),
+                    ("locations", Ok(id), None) => Self::format_response(self.store.get_location(id)),
                     ("locations", Ok(id), Some("avg")) => self.get_location_rating(id, req),
-                    ("visits", Ok(id), None) => self.get_visit(id),
+                    ("visits", Ok(id), None) => Self::format_response(self.store.get_visit(id)),
                     _ => Self::not_found(),
                 }
             (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>
