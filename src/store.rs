@@ -5,6 +5,7 @@ use std::sync::{
     RwLock,
     PoisonError,
 };
+use std::time;
 
 use super::models::*;
 
@@ -293,6 +294,8 @@ impl Store {
 
         let visits = self.visits.read()?;
 
+        let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs() as Timestamp;
+
         let (sum_mark, count_mark) = location_visit_ids
             .iter()
             .map(|vid| {
@@ -305,13 +308,14 @@ impl Store {
             })
             .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
             .into_iter()
-            .filter(|&(ref v, ref u)|
-                if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true }
+            .filter(|&(ref v, ref u)| {
+                let user_age = now - u.birth_date;
+                (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
-                && if let Some(from_age) = options.from_age { u.birth_date > (YAER_DURATION * from_age as Timestamp) } else { true }
-                && if let Some(to_age) = options.to_age { u.birth_date < (YAER_DURATION * to_age as Timestamp) } else { true }
-            )
+                && if let Some(from_age) = options.from_age { user_age > (YAER_DURATION * from_age as Timestamp) } else { true }
+                && if let Some(to_age) = options.to_age { user_age < (YAER_DURATION * to_age as Timestamp) } else { true }
+            })
             .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
         if 0 == count_mark {
