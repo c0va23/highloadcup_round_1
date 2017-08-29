@@ -1,17 +1,15 @@
-use std::collections::{
-    HashMap,
-};
 use std::sync::{
     RwLock,
     PoisonError,
 };
 use chrono::prelude::*;
+use fnv::FnvHashMap;
 
 use super::models::*;
 
 const AVG_ACCURACY: f64 = 5.0_f64;
 
-type Map<K, V> = HashMap<K, V>;
+type Map<K, V> = FnvHashMap<K, V>;
 
 #[derive(Debug)]
 pub enum StoreError {
