@@ -321,8 +321,8 @@ impl Store {
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
-                && if let Some(from_age) = from_age { u.birth_date > from_age } else { true }
-                && if let Some(to_age) = to_age { u.birth_date < to_age } else { true }
+                && if let Some(from_age) = from_age { u.birth_date < from_age } else { true }
+                && if let Some(to_age) = to_age { u.birth_date > to_age } else { true }
             })
             .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
