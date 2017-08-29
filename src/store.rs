@@ -297,6 +297,9 @@ impl Store {
         let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs() as Timestamp;
         debug!("Now {}", now);
 
+        let from_age = options.from_age.map(|from_age| now - (YAER_DURATION * from_age as Timestamp));
+        let to_age = options.to_age.map(|to_age| now - (YAER_DURATION * to_age as Timestamp));
+
         let (sum_mark, count_mark) = location_visit_ids
             .iter()
             .map(|vid| {
@@ -310,13 +313,11 @@ impl Store {
             .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
             .into_iter()
             .filter(|&(ref v, ref u)| {
-                let user_age = now - u.birth_date;
-                debug!("User age {} ({})", user_age, user_age as f64 / YAER_DURATION as f64);
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
-                && if let Some(from_age) = options.from_age { user_age > (YAER_DURATION * from_age as Timestamp) } else { true }
-                && if let Some(to_age) = options.to_age { user_age < (YAER_DURATION * to_age as Timestamp) } else { true }
+                && if let Some(from_age) = from_age { u.birth_date > from_age } else { true }
+                && if let Some(to_age) = to_age { u.birth_date < to_age } else { true }
             })
             .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
