@@ -85,8 +85,8 @@ pub struct UserVisits {
 pub struct LocationRateOptions {
     pub from_date: Option<Timestamp>,
     pub to_date: Option<Timestamp>,
-    pub from_age: Option<u32>,
-    pub to_age: Option<u32>,
+    pub from_age: Option<i32>,
+    pub to_age: Option<i32>,
     pub gender: Option<char>,
 }
 
