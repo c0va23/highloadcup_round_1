@@ -22,6 +22,7 @@ use std::env;
 use std::str;
 use std::sync::Arc;
 use std::thread;
+use std::time;
 
 use hyper::server;
 use hyper::mime;
@@ -37,6 +38,8 @@ use net2::unix::UnixTcpBuilderExt;
 mod models;
 mod store;
 mod loader;
+
+const STREAM_KEEPALIVE_SECS: Option<u64> = Some(300);
 
 #[derive(Debug)]
 enum AppError {
@@ -372,6 +375,8 @@ fn main() {
 
     loader::load_data(store.clone(), &data_path).unwrap();
 
+    let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
+
     let threads = (0..thread_count).map(move |thread_index|{
         let store = store.clone();
         thread::Builder::new()
@@ -392,6 +397,7 @@ fn main() {
 
                 core.run(
                     core_listener.incoming().for_each(move |(stream, socket_addr)| {
+                        stream.set_keepalive(keepalive).unwrap();
                         info!("Connection on thread #{} from {}", thread_index, socket_addr);
                         hyper::server::Http::new()
                             .keep_alive(true)
