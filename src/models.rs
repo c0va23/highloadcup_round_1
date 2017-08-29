@@ -90,7 +90,7 @@ pub struct LocationRateOptions {
     pub gender: Option<char>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct LocationRate {
     pub avg: f64,
 }

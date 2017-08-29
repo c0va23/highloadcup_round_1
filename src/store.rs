@@ -289,7 +289,7 @@ impl Store {
 
         let location_visit_ids = match self.location_visits.read()?.get(&user_id) {
             Some(ids) => ids.clone(),
-            None => return Err(StoreError::EntityNotExists)
+            None => return Ok(LocationRate::default()),
         };
 
         let visits = self.visits.read()?;
@@ -322,9 +322,7 @@ impl Store {
             .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
 
         if 0 == count_mark {
-            return Ok(LocationRate {
-                avg: 0_f64,
-            })
+            return Ok(LocationRate::default());
         }
 
         let delimiter = 10_f64.powf(AVG_ACCURACY);
