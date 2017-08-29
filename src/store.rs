@@ -11,6 +11,8 @@ use super::models::*;
 
 const AVG_ACCURACY: f64 = 5.0_f64;
 
+type Map<K, V> = HashMap<K, V>;
+
 #[derive(Debug)]
 pub enum StoreError {
     EntryExists,
@@ -27,21 +29,21 @@ impl<A> From<PoisonError<A>> for StoreError {
 }
 
 pub struct Store {
-    users: RwLock<HashMap<Id, User>>,
-    locations: RwLock<HashMap<Id, Location>>,
-    visits: RwLock<HashMap<Id, Visit>>,
-    user_visits: RwLock<HashMap<Id, Vec<Id>>>,
-    location_visits: RwLock<HashMap<Id, Vec<Id>>>,
+    users: RwLock<Map<Id, User>>,
+    locations: RwLock<Map<Id, Location>>,
+    visits: RwLock<Map<Id, Visit>>,
+    user_visits: RwLock<Map<Id, Vec<Id>>>,
+    location_visits: RwLock<Map<Id, Vec<Id>>>,
 }
 
 impl Store {
     pub fn new() -> Self {
         Self {
-            users: RwLock::new(HashMap::new()),
-            locations: RwLock::new(HashMap::new()),
-            visits: RwLock::new(HashMap::new()),
-            user_visits: RwLock::new(HashMap::new()),
-            location_visits: RwLock::new(HashMap::new()),
+            users: RwLock::new(Map::default()),
+            locations: RwLock::new(Map::default()),
+            visits: RwLock::new(Map::default()),
+            user_visits: RwLock::new(Map::default()),
+            location_visits: RwLock::new(Map::default()),
         }
     }
 
@@ -147,24 +149,24 @@ impl Store {
             .ok_or(StoreError::EntityNotExists)
     }
 
-    fn add_visit_to_user(user_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+    fn add_visit_to_user(user_visits: &mut Map<Id, Vec<Id>>, visit: &Visit) {
         let user_visit_ids = user_visits.entry(visit.user).or_insert(Vec::new());
         user_visit_ids.push(visit.id);
     }
 
-    fn remove_visit_from_user(user_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+    fn remove_visit_from_user(user_visits: &mut Map<Id, Vec<Id>>, visit: &Visit) {
         let user_visit_ids = user_visits.entry(visit.user).or_insert(Vec::new());
         if let Some(position) = user_visit_ids.iter().position(|id| *id == visit.id) {
             user_visit_ids.remove(position);
         }
     }
 
-    fn add_visit_to_location(location_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+    fn add_visit_to_location(location_visits: &mut Map<Id, Vec<Id>>, visit: &Visit) {
         let location_visit_ids = location_visits.entry(visit.location).or_insert(Vec::new());
         location_visit_ids.push(visit.id);
     }
 
-    fn remove_visit_from_location(location_visits: &mut HashMap<Id, Vec<Id>>, visit: &Visit) {
+    fn remove_visit_from_location(location_visits: &mut Map<Id, Vec<Id>>, visit: &Visit) {
         let location_visit_ids = location_visits.entry(visit.location).or_insert(Vec::new());
         if let Some(position) = location_visit_ids.iter().position(|id| *id == visit.id) {
             location_visit_ids.remove(position);
