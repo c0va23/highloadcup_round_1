@@ -383,6 +383,8 @@ fn main() {
                     .bind(address).unwrap()
                     .listen(backlog).unwrap();
 
+                net_listener.set_nonblocking(true).unwrap();
+
                 let mut core = tokio_core::reactor::Core::new().unwrap();
                 let handle = core.handle();
 
