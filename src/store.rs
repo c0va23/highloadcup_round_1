@@ -9,7 +9,7 @@ use std::time;
 
 use super::models::*;
 
-const YAER_DURATION: Timestamp = 365 * 24 * 60 * 60;
+const YAER_DURATION: f64 = 365.25 * 24.0 * 60.0 * 60.0;
 const AVG_ACCURACY: f64 = 5.0_f64;
 
 #[derive(Debug)]
@@ -297,8 +297,10 @@ impl Store {
         let now = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap().as_secs() as Timestamp;
         debug!("Now {}", now);
 
-        let from_age = options.from_age.map(|from_age| now - (YAER_DURATION * from_age as Timestamp));
-        let to_age = options.to_age.map(|to_age| now - (YAER_DURATION * to_age as Timestamp));
+        let from_age = options.from_age.map(|from_age| now - ((YAER_DURATION * from_age as f64) as Timestamp));
+        debug!("Age from {:?}", from_age);
+        let to_age = options.to_age.map(|to_age| now - ((YAER_DURATION * to_age as f64) as Timestamp));
+        debug!("Age to {:?}", to_age);
 
         let (sum_mark, count_mark) = location_visit_ids
             .iter()
