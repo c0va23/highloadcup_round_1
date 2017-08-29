@@ -278,20 +278,21 @@ impl Store {
         })
     }
 
-    pub fn get_location_rating(&self, user_id: Id, options: LocationRateOptions) ->
+    pub fn get_location_rating(&self, location_id: Id, options: LocationRateOptions) ->
             Result<LocationRate, StoreError> {
-        debug!("Find user {} visits by {:?}", user_id, options);
-        let users = self.users.read()?;
-        if users.get(&user_id).is_none() {
+        debug!("Find location {} rating by {:?}", location_id, options);
+        let locations = self.locations.read()?;
+        if locations.get(&location_id).is_none() {
             return Err(StoreError::EntityNotExists)
         }
 
-        let location_visit_ids = match self.location_visits.read()?.get(&user_id) {
+        let location_visit_ids = match self.location_visits.read()?.get(&location_id) {
             Some(ids) => ids.clone(),
             None => return Ok(LocationRate::default()),
         };
 
         let visits = self.visits.read()?;
+        let users = self.users.read()?;
 
         let now = Utc::now();
         debug!("Now {}", now);
