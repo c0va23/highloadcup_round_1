@@ -16,6 +16,8 @@ extern crate tokio_core;
 
 extern crate zip;
 
+extern crate chrono;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
