@@ -21,3 +21,5 @@ tokio-core = "0.1"
 zip = "0.2"
 
 chrono = "0.4"
+
+fnv = "1.0"

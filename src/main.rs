@@ -18,6 +18,8 @@ extern crate zip;
 
 extern crate chrono;
 
+extern crate fnv;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
