@@ -50,7 +50,7 @@ impl Store {
         users.get(&id).map(move |u| u.clone()).ok_or(StoreError::EntityNotExists)
     }
 
-    pub fn add_user(&self, user: User) -> Result<(), StoreError> {
+    pub fn add_user(&self, user: User) -> Result<Empty, StoreError> {
         let mut users = self.users.write()?;
         if let Some(_) = users.get(&user.id) {
             return Err(StoreError::EntryExists)
@@ -61,10 +61,10 @@ impl Store {
         }
 
         users.insert(user.id, user);
-        Ok(())
+        Ok(Empty{})
     }
 
-    pub fn update_user(&self, id: Id, user_data: UserData) -> Result<(), StoreError> {
+    pub fn update_user(&self, id: Id, user_data: UserData) -> Result<Empty, StoreError> {
         let mut users = self.users.write()?;
         if let Some(user) = users.get_mut(&id) {
             let mut updated_user = user.clone();
@@ -88,7 +88,7 @@ impl Store {
             } else {
                 return Err(StoreError::InvalidEntity)
             }
-            Ok(())
+            Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
         }
@@ -101,7 +101,7 @@ impl Store {
             .ok_or(StoreError::EntityNotExists)
     }
 
-    pub fn add_location(&self, location: Location) -> Result<(), StoreError> {
+    pub fn add_location(&self, location: Location) -> Result<Empty, StoreError> {
         let mut locations = self.locations.write()?;
         if let Some(_) = locations.get(&location.id) {
             return Err(StoreError::EntryExists)
@@ -110,10 +110,10 @@ impl Store {
             return Err(StoreError::InvalidEntity)
         }
         locations.insert(location.id, location);
-        Ok(())
+        Ok(Empty{})
     }
 
-    pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<(), StoreError> {
+    pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<Empty, StoreError> {
         let mut locations = self.locations.write()?;
         if let Some(location) = locations.get_mut(&id) {
             let mut updated_location = location.clone();
@@ -134,7 +134,7 @@ impl Store {
             } else {
                 return Err(StoreError::InvalidEntity)
             }
-            Ok(())
+            Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
         }
@@ -171,7 +171,7 @@ impl Store {
         }
     }
 
-    pub fn add_visit(&self, visit: Visit) -> Result<(), StoreError> {
+    pub fn add_visit(&self, visit: Visit) -> Result<Empty, StoreError> {
         let mut visits = self.visits.write()?;
 
         if let Some(_) = visits.get(&visit.id) {
@@ -189,10 +189,10 @@ impl Store {
         Self::add_visit_to_location(&mut location_visits, &visit);
 
         visits.insert(visit.id, visit);
-        Ok(())
+        Ok(Empty{})
     }
 
-    pub fn update_visit(&self, id: Id, visit_data: VisitData) -> Result<(), StoreError> {
+    pub fn update_visit(&self, id: Id, visit_data: VisitData) -> Result<Empty, StoreError> {
         let mut visits = self.visits.write()?;
 
         if let Some(visit) = visits.get_mut(&id) {
@@ -223,7 +223,7 @@ impl Store {
                 Self::add_visit_to_location(&mut location_visits, &updated_visit);
             }
             *visit = updated_visit;
-            Ok(())
+            Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
         }

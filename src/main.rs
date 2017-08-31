@@ -45,6 +45,7 @@ const STREAM_KEEPALIVE_SECS: Option<u64> = Some(300);
 
 #[derive(Debug)]
 enum AppError {
+    HyperError(hyper::Error),
     JsonError(serde_json::Error),
     StoreError(store::StoreError),
     ParamsError(serde_urlencoded::de::Error),
@@ -98,7 +99,7 @@ impl Router {
                 server::Response::new().with_status(hyper::StatusCode::BadRequest),
             AppError::StoreError(store::StoreError::EntityNotExists) =>
                 server::Response::new().with_status(hyper::StatusCode::NotFound),
-            AppError::StoreError(_) =>
+            AppError::StoreError(_) | AppError::HyperError(_) =>
                 server::Response::new().with_status(hyper::StatusCode::InternalServerError),
         }
     }
@@ -129,6 +130,7 @@ impl Router {
 
     fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -141,19 +143,14 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|user| Ok(self.store.add_user(user)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 
     fn update_user(self, id: u32, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -166,19 +163,14 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|user| Ok(self.store.update_user(id, user)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 
     fn add_location(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -191,20 +183,15 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|location| Ok(self.store.add_location(location)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 
     fn update_location(self, id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -217,19 +204,14 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|location_data| Ok(self.store.update_location(id, location_data)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 
     fn add_visit(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -242,20 +224,15 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|visit| Ok(self.store.add_visit(visit)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 
     fn update_visit(self, id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(req.body().concat2()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk: hyper::Chunk|
                 serde_json::from_slice(&chunk)
                     .map_err(AppError::JsonError)
@@ -268,14 +245,8 @@ impl Router {
                     )
                     .and_then(|value| Ok(serde_json::from_value(value)?))
                     .and_then(|visit_data| Ok(self.store.update_visit(id, visit_data)?))
-                    .map(|_|
-                        Ok(server::Response::new().with_body("{}")
-                            .with_header(hyper::header::ContentType(mime::APPLICATION_JSON))
-                            .with_header(hyper::header::ContentLength(2))
-                        )
-                    )
-                    .unwrap_or_else(|err| Ok(Self::app_error(err)))
             )
+            .then(Self::format_response)
         )
     }
 }

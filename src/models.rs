@@ -116,3 +116,6 @@ impl Validate for Visit {
         self.mark <= 5
     }
 }
+
+#[derive(Serialize, Debug, Clone)]
+pub struct Empty{}
