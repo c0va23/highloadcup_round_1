@@ -128,124 +128,69 @@ impl Router {
         Ok(serde_urlencoded::from_str(query.unwrap_or(""))?)
     }
 
+    fn check_json_value(map: serde_json::map::Map<String, serde_json::value::Value>) ->
+        Result<serde_json::Value, AppError>
+    {
+        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
+            Err(AppError::NullValue)
+        } else {
+            Ok(serde_json::value::Value::Object(map))
+        }
+    }
+
+    fn parse_body(body: hyper::Body) -> Box<Future<Item = serde_json::Value, Error = AppError>> {
+        Box::new(body.concat2().map_err(AppError::HyperError)
+            .and_then(move |chunk| Ok(serde_json::from_slice(&chunk)?))
+            .and_then(Self::check_json_value)
+        )
+    }
+
     fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|user| Ok(self.store.add_user(user)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |user| Ok(self.store.add_user(user)?))
             .then(Self::format_response)
         )
     }
 
     fn update_user(self, id: u32, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|user| Ok(self.store.update_user(id, user)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |user| Ok(self.store.update_user(id, user)?))
             .then(Self::format_response)
         )
     }
 
     fn add_location(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|location| Ok(self.store.add_location(location)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |location| Ok(self.store.add_location(location)?))
             .then(Self::format_response)
         )
     }
 
     fn update_location(self, id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|location_data| Ok(self.store.update_location(id, location_data)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |location_data| Ok(self.store.update_location(id, location_data)?))
             .then(Self::format_response)
         )
     }
 
     fn add_visit(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|visit| Ok(self.store.add_visit(visit)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |visit| Ok(self.store.add_visit(visit)?))
             .then(Self::format_response)
         )
     }
 
     fn update_visit(self, id: models::Id, req: server::Request) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(req.body().concat2()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk: hyper::Chunk|
-                serde_json::from_slice(&chunk)
-                    .map_err(AppError::JsonError)
-                    .and_then(|map: serde_json::map::Map<String, serde_json::value::Value>|
-                        if map.values().find(|v| **v == serde_json::value::Value::Null).is_some() {
-                            Err(AppError::NullValue)
-                        } else {
-                            Ok(serde_json::value::Value::Object(map))
-                        }
-                    )
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|visit_data| Ok(self.store.update_visit(id, visit_data)?))
-            )
+        Box::new(Self::parse_body(req.body())
+            .and_then(|value| Ok(serde_json::from_value(value)?))
+            .and_then(move |visit_data| Ok(self.store.update_visit(id, visit_data)?))
             .then(Self::format_response)
         )
     }
