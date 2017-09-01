@@ -88,20 +88,21 @@ impl Router {
 
     fn app_error(err: AppError) -> server::Response {
         error!("{:?}", err);
-        match err {
+        let status_code = match err {
             AppError::JsonError(_) =>
-                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+                hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntryExists) |
-                    AppError::StoreError(store::StoreError::InvalidEntity) |
-                    AppError::NullValue =>
-                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+            AppError::StoreError(store::StoreError::InvalidEntity) |
+            AppError::NullValue =>
+                hyper::StatusCode::BadRequest,
             AppError::ParamsError(_) =>
-                server::Response::new().with_status(hyper::StatusCode::BadRequest),
+                hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntityNotExists) =>
-                server::Response::new().with_status(hyper::StatusCode::NotFound),
+                hyper::StatusCode::NotFound,
             AppError::StoreError(_) | AppError::HyperError(_) =>
-                server::Response::new().with_status(hyper::StatusCode::InternalServerError),
-        }
+                hyper::StatusCode::InternalServerError,
+        };
+        server::Response::new().with_status(status_code)
     }
 
     fn format_response<E>(result: Result<E, AppError>) ->
