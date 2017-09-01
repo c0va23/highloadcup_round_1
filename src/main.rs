@@ -145,50 +145,50 @@ impl Router {
         )
     }
 
-    fn add_user(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+    fn add_user(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |user| Ok(self.store.add_user(user)?))
             .then(Self::format_response)
         )
     }
 
-    fn update_user(self, id: u32, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+    fn update_user(self, id: u32, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |user| Ok(self.store.update_user(id, user)?))
             .then(Self::format_response)
         )
     }
 
-    fn add_location(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+    fn add_location(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |location| Ok(self.store.add_location(location)?))
             .then(Self::format_response)
         )
     }
 
-    fn update_location(self, id: models::Id, req: server::Request) ->
+    fn update_location(self, id: models::Id, body: hyper::Body) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |location_data| Ok(self.store.update_location(id, location_data)?))
             .then(Self::format_response)
         )
     }
 
-    fn add_visit(self, req: server::Request) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+    fn add_visit(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |visit| Ok(self.store.add_visit(visit)?))
             .then(Self::format_response)
         )
     }
 
-    fn update_visit(self, id: models::Id, req: server::Request) ->
+    fn update_visit(self, id: models::Id, body: hyper::Body) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(req.body())
+        Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
             .and_then(move |visit_data| Ok(self.store.update_visit(id, visit_data)?))
             .then(Self::format_response)
@@ -203,13 +203,13 @@ impl server::Service for Router {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        let path = req.path().to_string();
-        let mut path_parts = path.split('/').skip(1);
+        let (method, uri, _, _, body) = req.deconstruct();
+        let mut path_parts = uri.path().split('/').skip(1);
 
-        let result = match (req.method(), path_parts.next(), path_parts.next(), path_parts.next(),
+        let result = match (method, path_parts.next(), path_parts.next(), path_parts.next(),
                 path_parts.next()) {
             (_, _, _, _, Some(_)) => Self::not_found(),
-            (&hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
+            (hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
                 match (entity, id_src.parse(), action) {
                     ("users", Ok(id), None) =>
                         Self::format_response(
@@ -218,7 +218,7 @@ impl server::Service for Router {
                         ),
                     ("users", Ok(id), Some("visits")) =>
                         Self::format_response(
-                            Self::parse_params(req.query())
+                            Self::parse_params(uri.query())
                                 .and_then(|options|
                                     self.store
                                         .find_user_visits(id, options)
@@ -232,7 +232,7 @@ impl server::Service for Router {
                         ),
                     ("locations", Ok(id), Some("avg")) =>
                         Self::format_response(
-                            Self::parse_params(req.query())
+                            Self::parse_params(uri.query())
                                 .and_then(|options|
                                     self.store.get_location_rating(id, options)
                                         .map_err(AppError::StoreError)
@@ -245,18 +245,18 @@ impl server::Service for Router {
                         ),
                     _ => Self::not_found(),
                 }
-            (&hyper::Method::Post, Some(entity), Some("new"), None, None) =>
+            (hyper::Method::Post, Some(entity), Some("new"), None, None) =>
                 match entity {
-                    "users" => self.clone().add_user(req),
-                    "locations" => self.clone().add_location(req),
-                    "visits" => self.clone().add_visit(req),
+                    "users" => self.clone().add_user(body),
+                    "locations" => self.clone().add_location(body),
+                    "visits" => self.clone().add_visit(body),
                     _ => Self::not_found(),
                 },
-            (&hyper::Method::Post, Some(entity), Some(id_src), None, None) =>
+            (hyper::Method::Post, Some(entity), Some(id_src), None, None) =>
                 match (entity, id_src.parse()) {
-                    ("users", Ok(id)) => self.clone().update_user(id, req),
-                    ("locations", Ok(id)) => self.clone().update_location(id, req),
-                    ("visits", Ok(id)) => self.clone().update_visit(id, req),
+                    ("users", Ok(id)) => self.clone().update_user(id, body),
+                    ("locations", Ok(id)) => self.clone().update_location(id, body),
+                    ("visits", Ok(id)) => self.clone().update_visit(id, body),
                     _ => Self::not_found(),
                 }
             _ => Self::not_found(),
