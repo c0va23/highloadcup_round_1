@@ -74,12 +74,17 @@ impl From<serde_urlencoded::de::Error> for AppError {
 #[derive(Clone)]
 struct Router {
     store: Arc<store::Store>,
+    cpupool: Arc<futures_cpupool::CpuPool>,
 }
 
 impl Router {
-    fn new(store: Arc<store::Store>) -> Self {
+    fn new(
+        store: Arc<store::Store>,
+        cpupool: Arc<futures_cpupool::CpuPool>,
+    ) -> Self {
         Self {
             store: store,
+            cpupool: cpupool,
         }
     }
 
@@ -150,7 +155,11 @@ impl Router {
     fn add_user(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |user| Ok(self.store.add_user(user)?))
+            .and_then(move |user|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.add_user(user)?)
+                )
+            )
             .then(Self::format_response)
         )
     }
@@ -158,7 +167,10 @@ impl Router {
     fn update_user(self, id: u32, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |user| Ok(self.store.update_user(id, user)?))
+            .and_then(move |user|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.update_user(id, user)?))
+                )
             .then(Self::format_response)
         )
     }
@@ -166,7 +178,10 @@ impl Router {
     fn add_location(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |location| Ok(self.store.add_location(location)?))
+            .and_then(move |location|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.add_location(location)?))
+                )
             .then(Self::format_response)
         )
     }
@@ -175,7 +190,11 @@ impl Router {
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |location_data| Ok(self.store.update_location(id, location_data)?))
+            .and_then(move |location_data|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.update_location(id, location_data)?)
+                )
+            )
             .then(Self::format_response)
         )
     }
@@ -183,7 +202,10 @@ impl Router {
     fn add_visit(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |visit| Ok(self.store.add_visit(visit)?))
+            .and_then(move |visit|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.add_visit(visit)?))
+                )
             .then(Self::format_response)
         )
     }
@@ -192,7 +214,10 @@ impl Router {
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(Self::parse_body(body)
             .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |visit_data| Ok(self.store.update_visit(id, visit_data)?))
+            .and_then(move |visit_data|
+                self.cpupool.clone().spawn_fn(move ||
+                    Ok(self.store.update_visit(id, visit_data)?))
+                )
             .then(Self::format_response)
         )
     }
@@ -278,6 +303,7 @@ const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 const DEFAULT_SERVER_THREADS: &'static str = "1";
 const DEFAULT_BACKLOG: &'static str = "1024";
 const DEFAULT_DATA_PATH: &'static str = "data/data.zip";
+const DEFAULT_CPUPOOL_SIZE: &'static str = "1";
 
 fn main() {
     env_logger::init().unwrap();
@@ -289,10 +315,13 @@ fn main() {
     let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
+    let cpupool_size = env::var("CPUPOOL_SIZE").unwrap_or(DEFAULT_CPUPOOL_SIZE.to_string())
+        .parse::<usize>().unwrap();
 
     info!("Start listen {} on {} threads with backlog", address, server_thread_count);
 
     let store = Arc::new(store::Store::new());
+    let cpupool = Arc::new(futures_cpupool::CpuPool::new(cpupool_size));
 
     loader::load_data(store.clone(), &data_path).unwrap();
 
@@ -300,6 +329,7 @@ fn main() {
 
     let threads = (0..server_thread_count).map(move |thread_index|{
         let store = store.clone();
+        let cpupool = cpupool.clone();
         thread::Builder::new()
             .name(format!("Server {}", thread_index))
             .spawn(move || {
@@ -320,9 +350,10 @@ fn main() {
                     core_listener.incoming().for_each(move |(stream, socket_addr)| {
                         stream.set_keepalive(keepalive).unwrap();
                         info!("Connection on thread #{} from {}", thread_index, socket_addr);
+                        let router = Router::new(store.clone(), cpupool.clone());
                         hyper::server::Http::new()
                             .keep_alive(true)
-                            .bind_connection(&handle, stream, socket_addr, Router::new(store.clone()));
+                            .bind_connection(&handle, stream, socket_addr, router);
                         Ok(())
                     })
                 )
