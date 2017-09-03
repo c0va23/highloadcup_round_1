@@ -277,6 +277,7 @@ impl server::Service for Router {
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 const DEFAULT_THREADS: &'static str = "1";
 const DEFAULT_BACKLOG: &'static str = "1024";
+const DEFAULT_DATA_PATH: &'static str = "data/data.zip";
 
 fn main() {
     env_logger::init().unwrap();
@@ -287,7 +288,7 @@ fn main() {
         .parse::<usize>().unwrap();
     let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
         .parse::<i32>().unwrap();
-    let data_path = env::var("DATA_PATH").unwrap();
+    let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
 
     info!("Start listen {} on {} threads with backlog", address, thread_count);
 
