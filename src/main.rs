@@ -42,7 +42,7 @@ mod models;
 mod store;
 mod loader;
 
-const STREAM_KEEPALIVE_SECS: Option<u64> = Some(300);
+const STREAM_KEEPALIVE_SECS: Option<u64> = Some(30);
 
 #[derive(Debug)]
 enum AppError {
