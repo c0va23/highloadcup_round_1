@@ -129,10 +129,11 @@ impl Router {
         )
     }
 
-    fn parse_params<P>(query: Option<&str>) -> Result<P, AppError>
+    fn parse_params<P>(query: Option<&str>) -> future::FutureResult<P, AppError>
     where P: serde::de::DeserializeOwned
     {
-        Ok(serde_urlencoded::from_str(query.unwrap_or(""))?)
+        future::result(serde_urlencoded::from_str(query.unwrap_or(""))
+            .map_err(AppError::ParamsError))
     }
 
     fn check_json_value(map: serde_json::map::Map<String, serde_json::value::Value>) ->
@@ -149,6 +150,55 @@ impl Router {
         Box::new(body.concat2().map_err(AppError::HyperError)
             .and_then(move |chunk| Ok(serde_json::from_slice(&chunk)?))
             .and_then(Self::check_json_value)
+        )
+    }
+
+    fn get_location(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(self.cpupool.clone()
+            .spawn_fn(move || Ok(self.store.get_location(id)?))
+            .then(Self::format_response)
+        )
+    }
+
+    fn get_user(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(self.cpupool.clone()
+            .spawn_fn(move || Ok(self.store.get_user(id)?))
+            .then(Self::format_response)
+        )
+    }
+
+    fn get_visit(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(self.cpupool.clone()
+            .spawn_fn(move || Ok(self.store.get_visit(id)?))
+            .then(Self::format_response)
+        )
+    }
+
+    fn get_location_rating(self, id: models::Id, query: Option<&str>) ->
+        Box<Future<Item = server::Response, Error = hyper::Error>>
+    {
+        Box::new(Self::parse_params(query)
+            .and_then(move |options|
+                self.cpupool.clone()
+                    .spawn_fn(move ||
+                        Ok(self.store.get_location_rating(id, options)?)
+                    )
+            )
+            .then(Self::format_response)
+        )
+    }
+
+    fn get_user_visits(self, id: models::Id, query: Option<&str>) ->
+        Box<Future<Item = server::Response, Error = hyper::Error>>
+    {
+        Box::new(Self::parse_params(query)
+            .and_then(move |options|
+                self.cpupool.clone()
+                    .spawn_fn(move ||
+                        Ok(self.store.find_user_visits(id, options)?)
+                    )
+            )
+            .then(Self::format_response)
         )
     }
 
@@ -239,37 +289,15 @@ impl server::Service for Router {
             (hyper::Method::Get, Some(entity), Some(id_src), action, None) =>
                 match (entity, id_src.parse(), action) {
                     ("users", Ok(id), None) =>
-                        Self::format_response(
-                            self.store.get_user(id)
-                                .map_err(AppError::StoreError)
-                        ),
+                        self.clone().get_user(id),
                     ("users", Ok(id), Some("visits")) =>
-                        Self::format_response(
-                            Self::parse_params(uri.query())
-                                .and_then(|options|
-                                    self.store
-                                        .find_user_visits(id, options)
-                                        .map_err(AppError::StoreError)
-                                )
-                        ),
+                        self.clone().get_user_visits(id, uri.query()),
                     ("locations", Ok(id), None) =>
-                        Self::format_response(
-                            self.store.get_location(id)
-                                .map_err(AppError::StoreError)
-                        ),
+                        self.clone().get_location(id),
                     ("locations", Ok(id), Some("avg")) =>
-                        Self::format_response(
-                            Self::parse_params(uri.query())
-                                .and_then(|options|
-                                    self.store.get_location_rating(id, options)
-                                        .map_err(AppError::StoreError)
-                                )
-                        ),
+                        self.clone().get_location_rating(id, uri.query()),
                     ("visits", Ok(id), None) =>
-                        Self::format_response(
-                            self.store.get_visit(id)
-                                .map_err(AppError::StoreError)
-                        ),
+                        self.clone().get_visit(id),
                     _ => Self::not_found(),
                 }
             (hyper::Method::Post, Some(entity), Some("new"), None, None) =>
