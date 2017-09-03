@@ -13,6 +13,7 @@ extern crate env_logger;
 
 extern crate net2;
 extern crate tokio_core;
+extern crate futures_cpupool;
 
 extern crate zip;
 
