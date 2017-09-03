@@ -275,7 +275,7 @@ impl server::Service for Router {
 }
 
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
-const DEFAULT_THREADS: &'static str = "1";
+const DEFAULT_SERVER_THREADS: &'static str = "1";
 const DEFAULT_BACKLOG: &'static str = "1024";
 const DEFAULT_DATA_PATH: &'static str = "data/data.zip";
 
@@ -284,13 +284,13 @@ fn main() {
 
     let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
         .parse().unwrap();
-    let thread_count = env::var("THREADS").unwrap_or(DEFAULT_THREADS.to_string())
+    let server_thread_count = env::var("SERVER_THREADS").unwrap_or(DEFAULT_SERVER_THREADS.to_string())
         .parse::<usize>().unwrap();
     let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
 
-    info!("Start listen {} on {} threads with backlog", address, thread_count);
+    info!("Start listen {} on {} threads with backlog", address, server_thread_count);
 
     let store = Arc::new(store::Store::new());
 
@@ -298,7 +298,7 @@ fn main() {
 
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
-    let threads = (0..thread_count).map(move |thread_index|{
+    let threads = (0..server_thread_count).map(move |thread_index|{
         let store = store.clone();
         thread::Builder::new()
             .name(format!("Server {}", thread_index))
