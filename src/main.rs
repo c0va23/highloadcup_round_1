@@ -98,7 +98,7 @@ impl Router {
             AppError::JsonError(_) =>
                 hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntryExists) |
-            AppError::StoreError(store::StoreError::InvalidEntity) |
+            AppError::StoreError(store::StoreError::InvalidEntity(_)) |
             AppError::NullValue =>
                 hyper::StatusCode::BadRequest,
             AppError::ParamsError(_) =>

@@ -2,8 +2,16 @@ pub type Id = u32;
 pub type Timestamp = i64;
 pub type Mark = u8;
 
+#[derive(Debug, Clone)]
+pub struct ValidationError {
+    pub field: String,
+    pub message: String,
+}
+
+pub type ValidationResult = Result<(), ValidationError>;
+
 pub trait Validate {
-    fn valid(&self) -> bool;
+    fn valid(&self) -> ValidationResult;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,25 +103,77 @@ pub struct LocationRate {
     pub avg: f64,
 }
 
+impl User {
+    const MAX_EMAIL_LEN: usize = 100;
+    const MAX_NAME_LEN: usize = 500;
+    const ALLOWED_GENDER: &'static [char] = &['f', 'm'];
+}
+
 impl Validate for User {
-    fn valid(&self) -> bool {
-        self.email.len() <= 100
-            && self.first_name.len() <= 50
-            && self.last_name.len() <= 50
-            && (self.gender == 'f' || self.gender == 'm')
+    fn valid(&self) -> ValidationResult {
+        if self.email.len() > Self::MAX_EMAIL_LEN {
+            Err(ValidationError {
+                field: "email".to_string(),
+                message: format!("Email len is {} (max {})", self.email.len(), Self::MAX_EMAIL_LEN),
+            })
+        } else if self.first_name.len() > Self::MAX_NAME_LEN {
+            Err(ValidationError {
+                field: "first_name".to_string(),
+                message: format!("Name len is {} (max {})", self.first_name.len(), Self::MAX_NAME_LEN),
+            })
+        } else if self.last_name.len() > Self::MAX_NAME_LEN {
+            Err(ValidationError {
+                field: "last_name".to_string(),
+                message: format!("Name len is {} (max {})", self.last_name.len(), Self::MAX_NAME_LEN),
+            })
+        } else if !Self::ALLOWED_GENDER.contains(&self.gender) {
+            Err(ValidationError {
+                field: "gender".to_string(),
+                message: format!("Gender is {} (allowed {:?})", self.gender, Self::ALLOWED_GENDER),
+            })
+        } else {
+            Ok(())
+        }
     }
+}
+
+impl Location {
+    const MAX_COUNTRY_LEN: usize = 50;
+    const MAX_CITY_LEN: usize = 50;
 }
 
 impl Validate for Location {
-    fn valid(&self) -> bool {
-        self.country.len() <= 50
-            && self.city.len() <= 50
+    fn valid(&self) -> ValidationResult {
+        if self.country.len() > Self::MAX_COUNTRY_LEN {
+            Err(ValidationError {
+                field: "contry".to_string(),
+                message: format!("Contry len is {} (max {})", self.country.len(), Self::MAX_COUNTRY_LEN),
+            })
+        } else if self.city.len() > Self::MAX_CITY_LEN {
+            Err(ValidationError{
+                field: "city".to_string(),
+                message: format!("City len is {} (max {})", self.city.len(), Self::MAX_CITY_LEN),
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 
+impl Visit {
+    const MAX_MARK: u8 = 5;
+}
+
 impl Validate for Visit {
-    fn valid(&self) -> bool {
-        self.mark <= 5
+    fn valid(&self) -> ValidationResult {
+        if self.mark > Self::MAX_MARK {
+            Err(ValidationError {
+                field: "mark".to_string(),
+                message: format!("Mark is {} (max {})", self.mark, Self::MAX_MARK),
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -17,7 +17,7 @@ pub enum StoreError {
     EntryExists,
     EntityNotExists,
     MutexPoisoned,
-    InvalidEntity,
+    InvalidEntity(ValidationError),
 }
 
 impl<A> From<PoisonError<A>> for StoreError {
@@ -66,8 +66,8 @@ impl Store {
             return Err(StoreError::EntryExists)
         }
 
-        if !user.valid() {
-            return Err(StoreError::InvalidEntity)
+        if let Err(error) = user.valid() {
+            return Err(StoreError::InvalidEntity(error))
         }
 
         store_inner.users.insert(user.id, Arc::new(user));
@@ -94,11 +94,10 @@ impl Store {
             if let Some(birth_date) = user_data.birth_date {
                 updated_user.birth_date = birth_date;
             }
-            if updated_user.valid() {
-                *Arc::make_mut(user) = updated_user
-            } else {
-                return Err(StoreError::InvalidEntity)
+            if let Err(error) = updated_user.valid() {
+                return Err(StoreError::InvalidEntity(error))
             }
+            *Arc::make_mut(user) = updated_user;
             Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
@@ -118,8 +117,8 @@ impl Store {
         if let Some(_) = store_inner.locations.get(&location.id) {
             return Err(StoreError::EntryExists)
         }
-        if !location.valid() {
-            return Err(StoreError::InvalidEntity)
+        if let Err(error) = location.valid() {
+            return Err(StoreError::InvalidEntity(error))
         }
         store_inner.locations.insert(location.id, Arc::new(location));
         Ok(Empty{})
@@ -142,11 +141,10 @@ impl Store {
             if let Some(city) = location_data.city {
                 updated_location.city = city;
             }
-            if updated_location.valid() {
-                *Arc::make_mut(location) = updated_location;
-            } else {
-                return Err(StoreError::InvalidEntity)
+            if let Err(error) = updated_location.valid() {
+                return Err(StoreError::InvalidEntity(error))
             }
+            *Arc::make_mut(location) = updated_location;
             Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
@@ -203,6 +201,24 @@ impl Store {
         }
     }
 
+    fn get_visit_user(store_inner: &StoreInner, visit: &Visit) -> Result<Arc<User>, StoreError> {
+        store_inner.users.get(&visit.user).ok_or_else(||
+            StoreError::InvalidEntity(ValidationError{
+                field: "user".to_string(),
+                message: format!("User with ID {} not exists", visit.user),
+            })
+        ).map(|u| u.clone())
+    }
+
+    fn get_visit_location(store_inner: &StoreInner, visit: &Visit) -> Result<Arc<Location>, StoreError> {
+        store_inner.locations.get(&visit.location).ok_or_else(||
+            StoreError::InvalidEntity(ValidationError{
+                field: "location".to_string(),
+                message: format!("Location with ID {} not exists", visit.location),
+            })
+        ).map(|l| l.clone())
+    }
+
     pub fn add_visit(&self, visit: Visit) -> Result<Empty, StoreError> {
         debug!("Add visit {:?}", visit);
         let mut store_inner = self.store_inner.write()?;
@@ -211,12 +227,12 @@ impl Store {
             return Err(StoreError::EntryExists)
         }
 
-        if !visit.valid() {
-            return Err(StoreError::InvalidEntity)
+        if let Err(error) = visit.valid() {
+            return Err(StoreError::InvalidEntity(error))
         }
 
-        let user = store_inner.users.get(&visit.user).ok_or(StoreError::InvalidEntity)?.clone();
-        let location = store_inner.locations.get(&visit.location).ok_or(StoreError::InvalidEntity)?.clone();
+        let user = Self::get_visit_user(&store_inner, &visit)?.clone();
+        let location = Self::get_visit_location(&store_inner, &visit)?.clone();
 
         let visit = Arc::new(visit);
 
@@ -247,19 +263,19 @@ impl Store {
             if let Some(mark) = visit_data.mark {
                 updated_visit.mark = mark;
             }
-            if !updated_visit.valid() {
-                return Err(StoreError::InvalidEntity)
+            if let Err(error) = updated_visit.valid() {
+                return Err(StoreError::InvalidEntity(error))
             }
             let visit = store_inner.visits.get_mut(&id).ok_or(StoreError::EntityNotExists)?;
             *Arc::make_mut(visit) = updated_visit;
         };
         if original_visit.user != visit.user {
-            let location = store_inner.locations.get(&visit.location).ok_or(StoreError::InvalidEntity)?.clone();
+            let location = Self::get_visit_location(&store_inner, &visit)?.clone();
             Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit);
             Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location);
         }
         if original_visit.location != visit.location {
-            let user = store_inner.users.get(&visit.user).ok_or(StoreError::InvalidEntity)?.clone();
+            let user = Self::get_visit_user(&store_inner, &visit)?.clone();
             Self::remove_visit_from_location(&mut store_inner.location_visits, &original_visit);
             Self::add_visit_to_location(&mut store_inner.location_visits, visit.clone(), user);
         }
