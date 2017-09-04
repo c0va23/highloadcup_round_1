@@ -61,18 +61,25 @@ pub fn load_data(store: Arc<store::Store>, file_path: &str) -> Result<(), Error>
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
         let file_name = file.name().to_string();
-        debug!("Load file {}", file_name);
         if file_name.starts_with("locations_") {
+            debug!("Load file {}", file_name);
             let locations_data: LocationsData = serde_json::from_reader(file)?;
             for location in locations_data.locations {
                 store.add_location(location)?;
             }
         } else if file_name.starts_with("users_") {
+            debug!("Load file {}", file_name);
             let users_data: UsersData = serde_json::from_reader(file)?;
             for user in users_data.users {
                 store.add_user(user)?;
             }
-        } else if file_name.starts_with("visits_") {
+        }
+    }
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        let file_name = file.name().to_string();
+        if file_name.starts_with("visits_") {
+            debug!("Load file {}", file_name);
             let visits_data: VisitsData = serde_json::from_reader(file)?;
             for visit in visits_data.visits {
                 store.add_visit(visit)?;
