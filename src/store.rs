@@ -164,7 +164,11 @@ impl Store {
 
     fn add_visit_to_user(user_visits: &mut Map<Id, Vec<Arc<Visit>>>, visit: Arc<Visit>) {
         let user_visits = user_visits.entry(visit.user).or_insert(Vec::new());
-        user_visits.push(visit.clone());
+        if let Some(position) = user_visits.iter().position(|v| visit.visited_at <  v.visited_at) {
+            user_visits.insert(position, visit.clone());
+        } else {
+            user_visits.push(visit.clone());
+        }
     }
 
     fn remove_visit_from_user(user_visits: &mut Map<Id, Vec<Arc<Visit>>>, visit: &Visit) {
@@ -275,15 +279,13 @@ impl Store {
                 && if let Some(to_distance) = options.to_distance { l.distance < to_distance  } else { true }
             );
 
-        let mut user_visits = visit_location_pairs
+        let user_visits = visit_location_pairs
             .map(|(v, l)| UserVisit {
                 mark: v.mark,
                 place: l.place,
                 visited_at: v.visited_at,
             })
             .collect::<Vec<UserVisit>>();
-
-        user_visits.sort_by(|l, r| l.visited_at.cmp(&r.visited_at));
 
         Ok(UserVisits {
             visits: user_visits,
