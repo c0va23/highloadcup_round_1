@@ -26,7 +26,7 @@ impl<A> From<PoisonError<A>> for StoreError {
     }
 }
 
-struct InnerStore {
+struct StoreInner {
     users: Map<Id, Arc<User>>,
     locations: Map<Id, Arc<Location>>,
     visits: Map<Id, Arc<Visit>>,
@@ -35,13 +35,13 @@ struct InnerStore {
 }
 
 pub struct Store {
-    store_inner: RwLock<InnerStore>,
+    store_inner: RwLock<StoreInner>,
 }
 
 impl Store {
     pub fn new() -> Self {
         Self {
-            store_inner: RwLock::new(InnerStore {
+            store_inner: RwLock::new(StoreInner {
                 users: Map::default(),
                 locations: Map::default(),
                 visits: Map::default(),
