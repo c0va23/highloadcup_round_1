@@ -181,7 +181,7 @@ impl Router {
             .and_then(move |options|
                 self.cpupool.clone()
                     .spawn_fn(move ||
-                        Ok(self.store.get_location_rating(id, options)?)
+                        Ok(self.store.get_location_avg(id, options)?)
                     )
             )
             .then(Self::format_response)
@@ -195,7 +195,7 @@ impl Router {
             .and_then(move |options|
                 self.cpupool.clone()
                     .spawn_fn(move ||
-                        Ok(self.store.find_user_visits(id, options)?)
+                        Ok(self.store.get_user_visits(id, options)?)
                     )
             )
             .then(Self::format_response)

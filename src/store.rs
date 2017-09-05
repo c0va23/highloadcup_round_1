@@ -282,9 +282,9 @@ impl Store {
         Ok(Empty{})
     }
 
-    pub fn find_user_visits(&self, user_id: Id, options: FindVisitOptions) ->
+    pub fn get_user_visits(&self, user_id: Id, options: GetUserVisitsOptions) ->
             Result<UserVisits, StoreError> {
-        debug!("Find user {} visits by {:?}", user_id, options);
+        debug!("Get user {} visits by {:?}", user_id, options);
         let store_inner = self.store_inner.read()?;
         if store_inner.users.get(&user_id).is_none() {
             return Err(StoreError::EntityNotExists)
@@ -315,9 +315,9 @@ impl Store {
         })
     }
 
-    pub fn get_location_rating(&self, location_id: Id, options: LocationRateOptions) ->
+    pub fn get_location_avg(&self, location_id: Id, options: GetLocationAvgOptions) ->
             Result<LocationRate, StoreError> {
-        debug!("Find location {} rating by {:?}", location_id, options);
+        debug!("Find location {} avg by {:?}", location_id, options);
         let store_inner = self.store_inner.read()?;
 
         if store_inner.locations.get(&location_id).is_none() {

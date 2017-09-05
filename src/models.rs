@@ -69,7 +69,7 @@ pub struct VisitData {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FindVisitOptions {
+pub struct GetUserVisitsOptions {
     pub from_date: Option<Timestamp>,
     pub to_date: Option<Timestamp>,
     pub country: Option<String>,
@@ -90,7 +90,7 @@ pub struct UserVisits {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LocationRateOptions {
+pub struct GetLocationAvgOptions {
     pub from_date: Option<Timestamp>,
     pub to_date: Option<Timestamp>,
     pub from_age: Option<i32>,
