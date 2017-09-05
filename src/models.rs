@@ -2,7 +2,7 @@ pub type Id = u32;
 pub type Timestamp = i64;
 pub type Mark = u8;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ValidationError {
     pub field: String,
     pub message: String,
@@ -50,7 +50,13 @@ pub struct LocationData {
     pub distance: Option<u32>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    PartialEq,
+)]
 pub struct Visit {
     pub id: Id,
     pub location: Id,
@@ -67,7 +73,12 @@ pub struct VisitData {
     pub mark: Option<u8>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Default,
+)]
 #[serde(rename_all = "camelCase")]
 pub struct GetUserVisitsOptions {
     pub from_date: Option<Timestamp>,
@@ -76,19 +87,30 @@ pub struct GetUserVisitsOptions {
     pub to_distance: Option<u32>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(
+    Clone,
+    Debug,
+    Serialize,
+    PartialEq,
+)]
 pub struct UserVisit {
     pub mark: Mark,
     pub visited_at: Timestamp,
     pub place: String,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(
+    Clone,
+    Debug,
+    Serialize,
+    Default,
+    PartialEq
+)]
 pub struct UserVisits {
     pub visits: Vec<UserVisit>
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLocationAvgOptions {
     pub from_date: Option<Timestamp>,
@@ -98,7 +120,13 @@ pub struct GetLocationAvgOptions {
     pub gender: Option<char>,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(
+    Clone,
+    Debug,
+    Serialize,
+    Default,
+    PartialEq,
+)]
 pub struct LocationRate {
     pub avg: f64,
 }

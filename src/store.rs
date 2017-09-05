@@ -12,7 +12,7 @@ const AVG_ACCURACY: f64 = 5.0_f64;
 
 type Map<K, V> = FnvHashMap<K, V>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StoreError {
     EntryExists,
     EntityNotExists,
@@ -247,9 +247,9 @@ impl Store {
         debug!("Update visit {} {:?}", id, visit_data);
         let mut store_inner = self.store_inner.write()?;
 
-        let visit = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?.clone();
-        let original_visit = visit.as_ref().clone();
-        {
+        let original_visit = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?.clone().as_ref().clone();
+        debug!("Original visit {:?}", original_visit);
+        let visit = {
             let mut updated_visit = original_visit.clone();
             if let Some(location) = visit_data.location {
                 updated_visit.location = location;
@@ -267,14 +267,19 @@ impl Store {
                 return Err(StoreError::InvalidEntity(error))
             }
             let visit = store_inner.visits.get_mut(&id).ok_or(StoreError::EntityNotExists)?;
+            debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
             *Arc::make_mut(visit) = updated_visit;
+            visit.clone()
         };
+        debug!("Updated visit {:?}", visit);
         if original_visit.user != visit.user {
+            debug!("Update visit user from {} to {}", original_visit.user, visit.user);
             let location = Self::get_visit_location(&store_inner, &visit)?.clone();
             Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit);
             Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location);
         }
         if original_visit.location != visit.location {
+            debug!("Update visit locatoin from {} to {}", original_visit.location, visit.location);
             let user = Self::get_visit_user(&store_inner, &visit)?.clone();
             Self::remove_visit_from_location(&mut store_inner.location_visits, &original_visit);
             Self::add_visit_to_location(&mut store_inner.location_visits, visit.clone(), user);
@@ -361,5 +366,129 @@ impl Store {
         Ok(LocationRate {
             avg: avg_mark,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use env_logger;
+
+    fn setup() {
+        env_logger::init().unwrap();
+    }
+
+    #[test]
+    fn update_visit_with_all_valid_fields() {
+        setup();
+
+        let store = Store::new();
+
+        let old_user = User {
+            id: 1,
+            email: "vasia.pupkin@mail.com".into(),
+            first_name: "Vasia".into(),
+            last_name: "Pupkin".into(),
+            gender: 'm',
+            birth_date: 315532800, // 1980-01-01T00:00:00
+        };
+
+        store.add_user(old_user.clone()).unwrap();
+
+        let new_user = User {
+            id: 2,
+            email: "dasha.petrova@mail.com".into(),
+            first_name: "Dasha".into(),
+            last_name: "Petrova".into(),
+            gender: 'f',
+            birth_date: 631152000, // 1990-01-01T00:00:00
+        };
+
+        store.add_user(new_user.clone()).unwrap();
+
+        let old_location = Location {
+            id: 1,
+            place: "Musei".into(),
+            city: "Krasnodar".into(),
+            country: "Russia".into(),
+            distance: 10,
+        };
+
+        store.add_location(old_location.clone()).unwrap();
+
+        let new_location = Location {
+            id: 2,
+            place: "Biblioteka".into(),
+            city: "Moscow".into(),
+            country: "Russia".into(),
+            distance: 0,
+        };
+
+        store.add_location(new_location.clone()).unwrap();
+
+        let visit = Visit {
+            id: 1,
+            user: old_user.id,
+            location: old_location.id,
+            mark: 3,
+            visited_at: 1262304000, // 2010-01-01T00:00:00
+        };
+
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            location: Some(new_location.id),
+            user: Some(new_user.id),
+            mark: Some(4),
+            visited_at: Some(1293840000), // 2011-01-01T00:00:00
+        };
+
+        assert!(store.update_visit(visit.id, visit_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_user_visits(old_user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: Vec::new(),
+            })
+        );
+
+        assert_eq!(
+            store.get_visit(visit.id),
+            Ok(Visit {
+                id: visit.id,
+                location: visit_data.location.unwrap(),
+                user: visit_data.user.unwrap(),
+                mark: visit_data.mark.unwrap(),
+                visited_at: visit_data.visited_at.unwrap(),
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(new_user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![
+                    UserVisit {
+                        mark: visit_data.mark.unwrap(),
+                        visited_at: visit_data.visited_at.unwrap(),
+                        place: new_location.place,
+                    },
+                ],
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(old_user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{ visits: vec![] })
+        );
+
+        assert_eq!(
+            store.get_location_avg(new_location.id, GetLocationAvgOptions::default()),
+            Ok(LocationRate { avg: visit_data.mark.unwrap() as f64 })
+        );
+
+        assert_eq!(
+            store.get_location_avg(old_location.id, GetLocationAvgOptions::default()),
+            Ok(LocationRate { avg: 0_f64 })
+        );
     }
 }
