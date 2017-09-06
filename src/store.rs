@@ -378,62 +378,77 @@ mod tests {
         env_logger::init().unwrap();
     }
 
-    #[test]
-    fn update_visit_with_all_valid_fields() {
-        setup();
-
-        let store = Store::new();
-
-        let old_user = User {
+    fn old_user() -> User {
+       User {
             id: 1,
             email: "vasia.pupkin@mail.com".into(),
             first_name: "Vasia".into(),
             last_name: "Pupkin".into(),
             gender: 'm',
             birth_date: 315532800, // 1980-01-01T00:00:00
-        };
+        }
+    }
 
-        store.add_user(old_user.clone()).unwrap();
-
-        let new_user = User {
+    fn new_user() -> User {
+        User {
             id: 2,
             email: "dasha.petrova@mail.com".into(),
             first_name: "Dasha".into(),
             last_name: "Petrova".into(),
             gender: 'f',
             birth_date: 631152000, // 1990-01-01T00:00:00
-        };
+        }
+    }
 
-        store.add_user(new_user.clone()).unwrap();
-
-        let old_location = Location {
+    fn old_location() -> Location {
+        Location {
             id: 1,
             place: "Musei".into(),
             city: "Krasnodar".into(),
             country: "Russia".into(),
             distance: 10,
-        };
+        }
+    }
 
-        store.add_location(old_location.clone()).unwrap();
-
-        let new_location = Location {
+    fn new_location() -> Location {
+        Location {
             id: 2,
             place: "Biblioteka".into(),
             city: "Moscow".into(),
             country: "Russia".into(),
             distance: 0,
-        };
+        }
+    }
 
-        store.add_location(new_location.clone()).unwrap();
-
-        let visit = Visit {
+    fn visit(user: &User, location: &Location) -> Visit {
+        Visit {
             id: 1,
-            user: old_user.id,
-            location: old_location.id,
+            user: user.id,
+            location: location.id,
             mark: 3,
             visited_at: 1262304000, // 2010-01-01T00:00:00
-        };
+        }
+    }
 
+    #[test]
+    fn update_visit_with_all_valid_fields() {
+        setup();
+
+        let store = Store::new();
+
+        let old_user = old_user();
+        store.add_user(old_user.clone()).unwrap();
+
+        let new_user = new_user();
+        store.add_user(new_user.clone()).unwrap();
+
+        let old_location = old_location();
+        store.add_location(old_location.clone()).unwrap();
+
+        let new_location = new_location();
+        store.add_location(new_location.clone()).unwrap();
+
+        let visit = visit(&old_user, &old_location);
         store.add_visit(visit.clone()).unwrap();
 
         let visit_data = VisitData {
