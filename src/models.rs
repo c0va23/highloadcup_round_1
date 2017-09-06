@@ -65,7 +65,12 @@ pub struct Visit {
     pub mark: u8,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Default,
+)]
 pub struct VisitData {
     pub location: Option<Id>,
     pub user: Option<Id>,
@@ -205,5 +210,5 @@ impl Validate for Visit {
     }
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct Empty{}

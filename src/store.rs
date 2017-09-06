@@ -374,8 +374,9 @@ mod tests {
     use super::*;
     use env_logger;
 
+    #[allow(unused_must_use)]
     fn setup() {
-        env_logger::init().unwrap();
+        env_logger::init();
     }
 
     fn old_user() -> User {
@@ -504,6 +505,99 @@ mod tests {
         assert_eq!(
             store.get_location_avg(old_location.id, GetLocationAvgOptions::default()),
             Ok(LocationRate { avg: 0_f64 })
+        );
+    }
+
+    #[test]
+    fn update_visit_with_valid_mark() {
+        setup();
+
+        let store = Store::new();
+
+        let user = old_user();
+        store.add_user(user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        let visit = visit(&user, &location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            mark: Some(4),
+            ..Default::default()
+        };
+
+        assert!(store.update_visit(visit.id, visit_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_visit(visit.id),
+            Ok(Visit {
+                id: visit.id,
+                location: visit.location,
+                user: visit.user,
+                mark: visit_data.mark.unwrap(),
+                visited_at: visit.visited_at,
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![
+                    UserVisit {
+                        mark: visit_data.mark.unwrap(),
+                        visited_at: visit.visited_at,
+                        place: location.place,
+                    },
+                ],
+            })
+        );
+
+        assert_eq!(
+            store.get_location_avg(location.id, GetLocationAvgOptions::default()),
+            Ok(LocationRate { avg: visit_data.mark.unwrap() as f64 })
+        );
+    }
+
+    #[test]
+    fn update_location_with_valid_fields() {
+        setup();
+
+        let store = Store::new();
+
+        let user = old_user();
+        store.add_user(user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        let visit = visit(&user, &location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let location_data = LocationData {
+            place: Some("Biblioteka".into()),
+            city: Some("Moscow".into()),
+            country: Some("Russia".into()),
+            distance: Some(100),
+        };
+
+        assert_eq!(
+            store.update_location(location.id, location_data.clone()),
+            Ok(Empty{})
+        );
+
+        assert_eq!(
+            store.get_user_visits(user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits {
+                visits: vec![
+                    UserVisit {
+                        mark: visit.mark,
+                        visited_at: visit.visited_at,
+                        place: location_data.place.unwrap(),
+                    }
+                ],
+            })
         );
     }
 }
