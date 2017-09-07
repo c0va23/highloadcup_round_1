@@ -377,6 +377,7 @@ fn main() {
                 core.run(
                     core_listener.incoming().for_each(move |(stream, socket_addr)| {
                         stream.set_keepalive(keepalive).unwrap();
+                        stream.set_nodelay(true).unwrap();
                         info!("Connection on thread #{} from {}", thread_index, socket_addr);
                         let router = Router::new(store.clone(), cpupool.clone());
                         hyper::server::Http::new()
