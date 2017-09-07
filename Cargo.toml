@@ -24,3 +24,6 @@ zip = "0.2"
 chrono = "0.4"
 
 fnv = "1.0"
+
+[dev-dependencies]
+matches = "0.1"

@@ -21,6 +21,10 @@ extern crate chrono;
 
 extern crate fnv;
 
+#[cfg(test)]
+#[macro_use]
+extern crate matches;
+
 use std::env;
 use std::str;
 use std::sync::Arc;
