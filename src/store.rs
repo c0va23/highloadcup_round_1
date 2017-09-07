@@ -273,45 +273,45 @@ impl Store {
         debug!("Update visit {} {:?}", id, visit_data);
         let mut store_inner = self.store_inner.write()?;
 
-        let (original_visit, visit) = {
-            let visit = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?;
-            let original_visit = visit.read()?.clone();
-            debug!("Original visit {:?}", original_visit);
-            let mut updated_visit = original_visit.clone();
-            if let Some(location) = visit_data.location {
-                updated_visit.location = location;
-            }
-            if let Some(user) = visit_data.user {
-                updated_visit.user = user;
-            }
-            if let Some(visited_at) = visit_data.visited_at {
-                updated_visit.visited_at = visited_at;
-            }
-            if let Some(mark) = visit_data.mark {
-                updated_visit.mark = mark;
-            }
-            if let Err(error) = updated_visit.valid() {
-                return Err(StoreError::InvalidEntity(error))
-            }
-            debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
-            *visit.write()? = updated_visit;
-            (original_visit, visit.clone())
-        };
+        let visit = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?.clone();
+        let original_visit = visit.read()?.clone();
+        debug!("Original visit {:?}", original_visit);
 
-        let updated_visit = visit.read()?.clone();
+        let mut updated_visit = original_visit.clone();
+        if let Some(location) = visit_data.location {
+            updated_visit.location = location;
+        }
+        if let Some(user) = visit_data.user {
+            updated_visit.user = user;
+        }
+        if let Some(visited_at) = visit_data.visited_at {
+            updated_visit.visited_at = visited_at;
+        }
+        if let Some(mark) = visit_data.mark {
+            updated_visit.mark = mark;
+        }
+        if let Err(error) = updated_visit.valid() {
+            return Err(StoreError::InvalidEntity(error))
+        }
+        debug!("Updated visit {:?}", updated_visit);
+
+        let location = Self::get_visit_location(&store_inner, &updated_visit)?.clone();
+        let user = Self::get_visit_user(&store_inner, &updated_visit)?.clone();
+
+        debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
+        *visit.write()? = updated_visit.clone();
 
         if original_visit.user != updated_visit.user {
             debug!("Update visit user from {} to {}", original_visit.user, updated_visit.user);
-            let location = Self::get_visit_location(&store_inner, &updated_visit)?.clone();
             Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit)?;
             Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location)?;
         }
         if original_visit.location != updated_visit.location {
             debug!("Update visit locatoin from {} to {}", original_visit.location, updated_visit.location);
-            let user = Self::get_visit_user(&store_inner, &updated_visit)?.clone();
             Self::remove_visit_from_location(&mut store_inner.location_visits, &original_visit)?;
             Self::add_visit_to_location(&mut store_inner.location_visits, visit.clone(), user)?;
         }
+
         Ok(Empty{})
     }
 
@@ -596,6 +596,62 @@ mod tests {
             store.get_location_avg(location.id, GetLocationAvgOptions::default()),
             Ok(LocationRate { avg: visit_data.mark.unwrap() as f64 })
         );
+    }
+
+    #[test]
+    fn update_visit_with_invalid_location() {
+        setup();
+
+        let store = Store::new();
+
+        let user = old_user();
+        store.add_user(user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        let visit = visit(&user, &location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            location: Some(100),
+            ..Default::default()
+        };
+
+        assert_matches!(
+            store.update_visit(visit.id, visit_data),
+            Err(StoreError::InvalidEntity(ValidationError{ .. }))
+        );
+
+        assert_eq!(store.get_visit(visit.id), Ok(visit.clone()));
+    }
+
+    #[test]
+    fn update_visit_with_invalid_user() {
+        setup();
+
+        let store = Store::new();
+
+        let user = old_user();
+        store.add_user(user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        let visit = visit(&user, &location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            user: Some(100),
+            ..Default::default()
+        };
+
+        assert_matches!(
+            store.update_visit(visit.id, visit_data),
+            Err(StoreError::InvalidEntity(ValidationError{ .. }))
+        );
+
+        assert_eq!(store.get_visit(visit.id), Ok(visit.clone()));
     }
 
     #[test]
