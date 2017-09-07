@@ -194,6 +194,8 @@ impl Store {
             .iter().position(|visit_id| *visit_id == visit.id);
         if let Some(position) = position {
             user_visits.remove(position);
+        } else {
+            error!("Visit {} not found on user {}", visit.id, visit.user);
         }
         Ok(())
     }
@@ -218,6 +220,8 @@ impl Store {
             .iter().position(|visit_id| *visit_id == visit.id);
         if let Some(position) = position {
             location_visits.remove(position);
+        } else {
+            error!("Visit {} not found on location {}", visit.id, visit.location);
         }
         Ok(())
     }
