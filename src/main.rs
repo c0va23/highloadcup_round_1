@@ -97,7 +97,7 @@ impl Router {
     }
 
     fn app_error(err: AppError) -> server::Response {
-        error!("{:?}", err);
+        warn!("{:?}", err);
         let status_code = match err {
             AppError::JsonError(_) =>
                 hyper::StatusCode::BadRequest,
