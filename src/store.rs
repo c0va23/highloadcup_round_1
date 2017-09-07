@@ -301,7 +301,7 @@ impl Store {
         debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
         *visit.write()? = updated_visit.clone();
 
-        if original_visit.user != updated_visit.user {
+        if original_visit.user != updated_visit.user || original_visit.visited_at != updated_visit.visited_at {
             debug!("Update visit user from {} to {}", original_visit.user, updated_visit.user);
             Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit)?;
             Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location)?;
@@ -595,6 +595,64 @@ mod tests {
         assert_eq!(
             store.get_location_avg(location.id, GetLocationAvgOptions::default()),
             Ok(LocationRate { avg: visit_data.mark.unwrap() as f64 })
+        );
+    }
+
+    #[test]
+    fn update_visit_with_valid_visited_at() {
+        setup();
+
+        let store = Store::new();
+
+        let user = old_user();
+        store.add_user(user.clone()).unwrap();
+
+        let new_location = new_location();
+        store.add_location(new_location.clone()).unwrap();
+
+        let old_location = old_location();
+        store.add_location(old_location.clone()).unwrap();
+
+        let old_visit = Visit { id: 0, location: old_location.id, user: user.id, visited_at: 1, mark: 3 };
+        store.add_visit(old_visit.clone()).unwrap();
+
+        let new_visit = Visit { id: 1, location: new_location.id, user: user.id, visited_at: 2, mark: 4 };
+        store.add_visit(new_visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            visited_at: Some(3),
+            ..Default::default()
+        };
+
+        assert!(store.update_visit(old_visit.id, visit_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_visit(old_visit.id),
+            Ok(Visit {
+                id: old_visit.id,
+                location: old_visit.location,
+                user: old_visit.user,
+                mark: old_visit.mark,
+                visited_at: visit_data.visited_at.unwrap(),
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![
+                    UserVisit {
+                        mark: new_visit.mark,
+                        visited_at: new_visit.visited_at,
+                        place: new_location.place,
+                    },
+                    UserVisit {
+                        mark: old_visit.mark,
+                        visited_at: visit_data.visited_at.unwrap(),
+                        place: old_location.place,
+                    },
+                ],
+            })
         );
     }
 
