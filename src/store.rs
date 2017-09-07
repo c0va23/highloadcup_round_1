@@ -76,8 +76,8 @@ impl Store {
 
     pub fn update_user(&self, id: Id, user_data: UserData) -> Result<Empty, StoreError> {
         debug!("Update user {} {:?}", id, user_data);
-        let mut store_inner = self.store_inner.write()?;
-        if let Some(user) = store_inner.users.get_mut(&id) {
+        let store_inner = self.store_inner.write()?;
+        if let Some(user) = store_inner.users.get(&id) {
             let mut updated_user = user.read()?.clone();
             if let Some(email) = user_data.email {
                 updated_user.email = email;
@@ -126,8 +126,8 @@ impl Store {
 
     pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<Empty, StoreError> {
         debug!("Update location {} {:?}", id, location_data);
-        let mut store_inner = self.store_inner.write()?;
-        if let Some(location) = store_inner.locations.get_mut(&id) {
+        let store_inner = self.store_inner.write()?;
+        if let Some(location) = store_inner.locations.get(&id) {
             let mut updated_location = location.read()?.clone();
             if let Some(distance) = location_data.distance {
                 updated_location.distance = distance;
