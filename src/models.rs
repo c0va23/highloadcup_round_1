@@ -33,7 +33,7 @@ pub struct UserData {
     pub birth_date: Option<Timestamp>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Location {
     pub id: Id,
     pub place: String,
@@ -42,7 +42,7 @@ pub struct Location {
     pub distance: u32,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Default)]
 pub struct LocationData {
     pub place: Option<String>,
     pub country: Option<String>,

@@ -301,7 +301,9 @@ impl Store {
         debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
         *visit.write()? = updated_visit.clone();
 
-        if original_visit.user != updated_visit.user || original_visit.visited_at != updated_visit.visited_at {
+        if original_visit.user != updated_visit.user ||
+                original_visit.visited_at != updated_visit.visited_at ||
+                original_visit.location != updated_visit.location {
             debug!("Update visit user from {} to {}", original_visit.user, updated_visit.user);
             Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit)?;
             Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location)?;
@@ -748,6 +750,69 @@ mod tests {
                         visited_at: visit.visited_at,
                         place: location_data.place.unwrap(),
                     }
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn complex_update() {
+        setup();
+
+        let store = Store::new();
+
+        let user = new_user();
+        store.add_user(user.clone()).unwrap();
+
+        let old_location = old_location();
+        store.add_location(old_location.clone()).unwrap();
+
+        let new_location = new_location();
+        store.add_location(new_location.clone()).unwrap();
+
+        let visit = visit(&user, &old_location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            location: Some(new_location.id),
+            ..Default::default()
+        };
+
+        assert!(store.update_visit(visit.id, visit_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_visit(visit.id),
+            Ok(Visit {
+                location: new_location.id,
+                ..visit
+            })
+        );
+
+        let new_place = "Teatr";
+        let location_data = LocationData {
+            place: Some(new_place.into()),
+            ..Default::default()
+        };
+
+        assert!(store.update_location(new_location.id, location_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_location(new_location.id),
+            Ok(Location {
+                place: new_place.into(),
+                ..new_location
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![
+                    UserVisit {
+                        mark: visit.mark,
+                        visited_at: visit.visited_at,
+                        place: new_place.into(),
+                    },
                 ],
             })
         );
