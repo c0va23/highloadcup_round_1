@@ -366,10 +366,12 @@ impl Store {
             return Err(StoreError::EntityNotExists)
         }
 
-        let location_visit_ids = match store_inner.location_visits.get(&location_id) {
+        let location_visits = match store_inner.location_visits.get(&location_id) {
             Some(ids) => ids.clone(),
             None => return Ok(LocationRate::default()),
         };
+
+        debug!("Location visits: {:?}", location_visits);
 
         let now = Utc::now();
         debug!("Now {}", now);
@@ -382,7 +384,7 @@ impl Store {
             .map(|t| t.timestamp());
         debug!("Age to {:?}", to_age);
 
-        let (sum_mark, count_mark) = location_visit_ids
+        let (sum_mark, count_mark) = location_visits
             .iter()
             .map(|&(ref v, ref u)| Ok((v.read()?.clone(), u.read()?.clone())))
             .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
@@ -775,6 +777,7 @@ mod tests {
 
         let visit_data = VisitData {
             location: Some(new_location.id),
+            mark: Some(2),
             ..Default::default()
         };
 
@@ -784,7 +787,22 @@ mod tests {
             store.get_visit(visit.id),
             Ok(Visit {
                 location: new_location.id,
+                mark: visit_data.mark.unwrap(),
                 ..visit
+            })
+        );
+
+        assert_eq!(
+            store.get_location_avg(old_location.id, Default::default()),
+            Ok(LocationRate {
+                avg: 0f64,
+            })
+        );
+
+        assert_eq!(
+            store.get_location_avg(new_location.id, Default::default()),
+            Ok(LocationRate {
+                avg: visit_data.mark.unwrap() as f64,
             })
         );
 
@@ -809,7 +827,7 @@ mod tests {
             Ok(UserVisits{
                 visits: vec![
                     UserVisit {
-                        mark: visit.mark,
+                        mark: visit_data.mark.unwrap(),
                         visited_at: visit.visited_at,
                         place: new_place.into(),
                     },
