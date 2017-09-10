@@ -1,5 +1,3 @@
-use std::cell::RefMut;
-
 use zip;
 use std::fs;
 use std::io;
@@ -55,7 +53,7 @@ struct VisitsData {
     visits: Vec<models::Visit>,
 }
 
-pub fn load_data(store: &mut RefMut<store::Store>, file_path: &str) -> Result<(), Error> {
+pub fn load_data(store: &store::Store, file_path: &str) -> Result<(), Error> {
     let reader = fs::File::open(file_path)?;
     let mut archive = zip::ZipArchive::new(reader)?;
     for i in 0..archive.len() {

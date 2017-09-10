@@ -26,8 +26,7 @@ extern crate matches;
 
 use std::env;
 use std::str;
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::sync::Arc;
 use std::time;
 
 use hyper::server;
@@ -53,6 +52,7 @@ enum AppError {
     JsonError(serde_json::Error),
     StoreError(store::StoreError),
     ParamsError(serde_urlencoded::de::Error),
+    LockError,
     NullValue,
 }
 
@@ -74,14 +74,20 @@ impl From<serde_urlencoded::de::Error> for AppError {
     }
 }
 
+impl<'a, T> From<std::sync::PoisonError<std::sync::RwLockWriteGuard<'a, T>>> for AppError {
+    fn from(_err: std::sync::PoisonError<std::sync::RwLockWriteGuard<'a, T>>) -> AppError {
+        AppError::LockError
+    }
+}
+
 #[derive(Clone)]
 struct Router {
-    store: Rc<RefCell<store::Store>>,
+    store: Arc<store::Store>,
 }
 
 impl Router {
     fn new(
-        store: Rc<RefCell<store::Store>>,
+        store: Arc<store::Store>,
     ) -> Self {
         Self {
             store: store,
@@ -105,7 +111,7 @@ impl Router {
                 hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntityNotExists) =>
                 hyper::StatusCode::NotFound,
-            AppError::HyperError(_) =>
+            AppError::HyperError(_) | AppError::LockError =>
                 hyper::StatusCode::InternalServerError,
         };
         server::Response::new().with_status(status_code)
@@ -145,19 +151,19 @@ impl Router {
         }
     }
 
-    fn parse_body(body: hyper::Body) -> Result<serde_json::Value, AppError> {
-        body.concat2()
-            .wait()
-            .map_err(AppError::HyperError)
-            .and_then(move |chunk| Ok(serde_json::from_slice(&chunk)?))
-            .and_then(Self::check_json_value)
+    fn parse_body(body: hyper::Body) -> Box<Future<Item = serde_json::Value, Error = AppError>> {
+        Box::new(
+            body.concat2()
+                .map_err(AppError::HyperError)
+                .and_then(move |chunk| Ok(serde_json::from_slice(&chunk)?))
+                .and_then(Self::check_json_value)
+        )
     }
 
     fn get_location(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
             future::result(
                 self.store
-                    .borrow()
                     .get_location(id)
                     .map_err(AppError::StoreError)
             )
@@ -169,9 +175,7 @@ impl Router {
         Box::new(
             future::result(
                 self.store
-                    .borrow()
                     .get_user(id)
-                    .clone()
                     .map_err(AppError::StoreError)
             )
             .then(Self::format_response)
@@ -182,7 +186,6 @@ impl Router {
         Box::new(
             future::result(
                 self.store
-                    .borrow()
                     .get_visit(id)
                     .map_err(AppError::StoreError)
             )
@@ -198,7 +201,6 @@ impl Router {
                 Self::parse_params(query)
                     .and_then(|options|
                         self.store
-                            .borrow()
                             .get_location_avg(id, options)
                             .map_err(AppError::StoreError)
                     )
@@ -215,7 +217,6 @@ impl Router {
                 Self::parse_params(query)
                     .and_then(|options|
                         self.store
-                            .borrow()
                             .get_user_visits(id, options)
                             .map_err(AppError::StoreError)
                     )
@@ -225,102 +226,59 @@ impl Router {
         )
     }
 
-    fn add_user(&self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+    fn add_user(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|user|
-                        self.store
-                            .borrow_mut()
-                            .add_user(user)
-                            .clone()
-                            .map_err(AppError::StoreError)
-                    )
-            )
-            .then(Self::format_response)
+            Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(move |user| Ok(self.store.add_user(user)?))
+                .then(Self::format_response)
         )
     }
 
     fn update_user(self, id: u32, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|user|
-                        self.store
-                            .borrow_mut()
-                            .update_user(id, user)
-                            .map_err(AppError::StoreError)
-                    )
-            )
-            .then(Self::format_response)
+            Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(move |user| Ok(self.store.update_user(id, user)?))
+                .then(Self::format_response)
         )
     }
 
     fn add_location(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
+            Self::parse_body(body)
                 .and_then(|value| Ok(serde_json::from_value(value)?))
-                .and_then(|location|
-                    self.store
-                        .borrow_mut()
-                        .add_location(location)
-                        .map_err(AppError::StoreError)
-                )
-            )
-            .then(Self::format_response)
+                .and_then(move |location| Ok(self.store.add_location(location)?))
+                .then(Self::format_response)
         )
     }
 
     fn update_location(self, id: models::Id, body: hyper::Body) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|location_data|
-                        self.store
-                            .borrow_mut()
-                            .update_location(id, location_data)
-                            .map_err(AppError::StoreError)
-                    )
-            )
-            .then(Self::format_response)
+            Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(move |location_data| Ok(self.store .update_location(id, location_data)?))
+                .then(Self::format_response)
         )
     }
 
     fn add_visit(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
+            Self::parse_body(body)
                 .and_then(|value| Ok(serde_json::from_value(value)?))
-                .and_then(|visit|
-                    self.store
-                        .borrow_mut()
-                        .add_visit(visit)
-                        .map_err(AppError::StoreError)
-                )
-            )
-            .then(Self::format_response)
+                .and_then(move |visit| Ok(self.store.add_visit(visit)?))
+                .then(Self::format_response)
         )
     }
 
     fn update_visit(self, id: models::Id, body: hyper::Body) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
         Box::new(
-            future::result(
-                Self::parse_body(body)
-                    .and_then(|value| Ok(serde_json::from_value(value)?))
-                    .and_then(|visit_data|
-                        self.store
-                            .borrow_mut()
-                            .update_visit(id, visit_data)
-                            .map_err(AppError::StoreError)
-                    )
-            )
-            .then(Self::format_response)
+            Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(move |visit_data| Ok(self.store.update_visit(id, visit_data)?))
+                .then(Self::format_response)
         )
     }
 }
@@ -392,9 +350,9 @@ fn main() {
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
 
-    let store = Rc::new(RefCell::new(store::Store::new()));
+    let store = Arc::new(store::Store::new());
 
-    loader::load_data(&mut store.borrow_mut(), &data_path).unwrap();
+    loader::load_data(&store.clone(), &data_path).unwrap();
 
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
