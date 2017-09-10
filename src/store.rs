@@ -51,6 +51,7 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
+        self.users_visits.borrow_mut().insert(user.id, Vec::new());
         self.users.borrow_mut().insert(user.id, Rc::new(RefCell::new(user)));
         Ok(Empty{})
     }
@@ -97,6 +98,8 @@ impl Store {
         if let Err(error) = location.valid() {
             return Err(StoreError::InvalidEntity(error))
         }
+
+        self.locations_visits.borrow_mut().insert(location.id, Vec::new());
         self.locations.borrow_mut().insert(location.id, Rc::new(RefCell::new(location)));
         Ok(Empty{})
     }
@@ -142,9 +145,7 @@ impl Store {
         };
 
         let mut users_visits = self.users_visits.borrow_mut();
-        let user_visits = users_visits
-            .entry(user)
-            .or_insert(Vec::new());
+        let user_visits = users_visits.get_mut(&user).unwrap();
 
         let position = user_visits.iter().position(|&(ref visit, _)|
             visited_at < visit.borrow().visited_at
@@ -163,9 +164,7 @@ impl Store {
         visit: &Visit,
     ) {
         let mut users_visits = self.users_visits.borrow_mut();
-        let user_visits = users_visits
-            .entry(visit.user)
-            .or_insert(Vec::new());
+        let user_visits = users_visits.get_mut(&visit.user).unwrap();
 
         let position = user_visits.iter().position(|&(ref v, _)|
             visit.id == v.borrow().id
@@ -184,9 +183,7 @@ impl Store {
         user: Rc<RefCell<User>>,
     ) {
         let mut locations_visits = self.locations_visits.borrow_mut();
-        let location_visits = locations_visits
-            .entry(visit.borrow().location)
-            .or_insert(Vec::new());
+        let location_visits = locations_visits.get_mut(&visit.borrow().location).unwrap();
 
         location_visits.push((visit.clone(), user.clone()));
     }
@@ -196,9 +193,7 @@ impl Store {
         visit: &Visit,
     ) {
         let mut locations_visits = self.locations_visits.borrow_mut();
-        let location_visits = locations_visits
-            .entry(visit.location)
-            .or_insert(Vec::new());
+        let location_visits = locations_visits.get_mut(&visit.location).unwrap();
 
         let position = location_visits.iter().position(|&(ref v, _)|
             v.borrow().id == visit.id
@@ -579,6 +574,68 @@ mod tests {
         assert_eq!(
             store.get_location_avg(location.id, GetLocationAvgOptions::default()),
             Ok(LocationRate { avg: visit_data.mark.unwrap() as f64 })
+        );
+    }
+
+    #[test]
+    fn update_visit_with_valid_user() {
+        setup();
+
+        let store = Store::new();
+
+        let old_user = old_user();
+        store.add_user(old_user.clone()).unwrap();
+
+        let new_user = new_user();
+        store.add_user(new_user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        let visit = visit(&old_user, &location);
+        store.add_visit(visit.clone()).unwrap();
+
+        let visit_data = VisitData {
+            user: Some(new_user.id),
+            ..Default::default()
+        };
+
+        assert!(store.update_visit(visit.id, visit_data.clone()).is_ok());
+
+        assert_eq!(
+            store.get_visit(visit.id),
+            Ok(Visit {
+                id: visit.id,
+                location: visit.location,
+                user: new_user.id,
+                mark: visit.mark,
+                visited_at: visit.visited_at,
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(old_user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![]
+            })
+        );
+
+        assert_eq!(
+            store.get_user_visits(new_user.id, GetUserVisitsOptions::default()),
+            Ok(UserVisits{
+                visits: vec![
+                    UserVisit {
+                        mark: visit.mark,
+                        visited_at: visit.visited_at,
+                        place: location.place,
+                    },
+                ],
+            })
+        );
+
+        assert_eq!(
+            store.get_location_avg(location.id, GetLocationAvgOptions::default()),
+            Ok(LocationRate { avg: visit.mark as f64 })
         );
     }
 
