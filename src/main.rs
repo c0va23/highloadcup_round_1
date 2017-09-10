@@ -27,8 +27,8 @@ extern crate matches;
 
 use std::env;
 use std::str;
-use std::sync::Arc;
-use std::thread;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::time;
 
 use hyper::server;
@@ -77,18 +77,15 @@ impl From<serde_urlencoded::de::Error> for AppError {
 
 #[derive(Clone)]
 struct Router {
-    store: Arc<store::Store>,
-    cpupool: Arc<futures_cpupool::CpuPool>,
+    store: Rc<RefCell<store::Store>>,
 }
 
 impl Router {
     fn new(
-        store: Arc<store::Store>,
-        cpupool: Arc<futures_cpupool::CpuPool>,
+        store: Rc<RefCell<store::Store>>,
     ) -> Self {
         Self {
             store: store,
-            cpupool: cpupool,
         }
     }
 
@@ -109,7 +106,7 @@ impl Router {
                 hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntityNotExists) =>
                 hyper::StatusCode::NotFound,
-            AppError::StoreError(_) | AppError::HyperError(_) =>
+            AppError::HyperError(_) =>
                 hyper::StatusCode::InternalServerError,
         };
         server::Response::new().with_status(status_code)
@@ -133,11 +130,10 @@ impl Router {
         )
     }
 
-    fn parse_params<P>(query: Option<&str>) -> future::FutureResult<P, AppError>
+    fn parse_params<P>(query: Option<&str>) -> Result<P, AppError>
     where P: serde::de::DeserializeOwned
     {
-        future::result(serde_urlencoded::from_str(query.unwrap_or(""))
-            .map_err(AppError::ParamsError))
+        Ok(serde_urlencoded::from_str(query.unwrap_or(""))?)
     }
 
     fn check_json_value(map: serde_json::map::Map<String, serde_json::value::Value>) ->
@@ -150,128 +146,181 @@ impl Router {
         }
     }
 
-    fn parse_body(body: hyper::Body) -> Box<Future<Item = serde_json::Value, Error = AppError>> {
-        Box::new(body.concat2().map_err(AppError::HyperError)
+    fn parse_body(body: hyper::Body) -> Result<serde_json::Value, AppError> {
+        body.concat2()
+            .wait()
+            .map_err(AppError::HyperError)
             .and_then(move |chunk| Ok(serde_json::from_slice(&chunk)?))
             .and_then(Self::check_json_value)
-        )
     }
 
-    fn get_location(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.cpupool.clone()
-            .spawn_fn(move || Ok(self.store.get_location(id)?))
+    fn get_location(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                self.store
+                    .borrow()
+                    .get_location(id)
+                    .map_err(AppError::StoreError)
+            )
             .then(Self::format_response)
         )
     }
 
-    fn get_user(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.cpupool.clone()
-            .spawn_fn(move || Ok(self.store.get_user(id)?))
+    fn get_user(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                self.store
+                    .borrow()
+                    .get_user(id)
+                    .clone()
+                    .map_err(AppError::StoreError)
+            )
             .then(Self::format_response)
         )
     }
 
-    fn get_visit(self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(self.cpupool.clone()
-            .spawn_fn(move || Ok(self.store.get_visit(id)?))
+    fn get_visit(&self, id: models::Id) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                self.store
+                    .borrow()
+                    .get_visit(id)
+                    .map_err(AppError::StoreError)
+            )
             .then(Self::format_response)
         )
     }
 
-    fn get_location_rating(self, id: models::Id, query: Option<&str>) ->
+    fn get_location_rating(&self, id: models::Id, query: Option<&str>) ->
         Box<Future<Item = server::Response, Error = hyper::Error>>
     {
-        Box::new(Self::parse_params(query)
-            .and_then(move |options|
-                self.cpupool.clone()
-                    .spawn_fn(move ||
-                        Ok(self.store.get_location_avg(id, options)?)
+        Box::new(
+            future::result(
+                Self::parse_params(query)
+                    .and_then(|options|
+                        self.store
+                            .borrow()
+                            .get_location_avg(id, options)
+                            .map_err(AppError::StoreError)
                     )
             )
             .then(Self::format_response)
         )
     }
 
-    fn get_user_visits(self, id: models::Id, query: Option<&str>) ->
+    fn get_user_visits(&self, id: models::Id, query: Option<&str>) ->
         Box<Future<Item = server::Response, Error = hyper::Error>>
     {
-        Box::new(Self::parse_params(query)
-            .and_then(move |options|
-                self.cpupool.clone()
-                    .spawn_fn(move ||
-                        Ok(self.store.get_user_visits(id, options)?)
+        Box::new(
+            future::result(
+                Self::parse_params(query)
+                    .and_then(|options|
+                        self.store
+                            .borrow()
+                            .get_user_visits(id, options)
+                            .map_err(AppError::StoreError)
                     )
+
             )
             .then(Self::format_response)
         )
     }
 
-    fn add_user(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |user|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.add_user(user)?)
-                )
+    fn add_user(&self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
+                    .and_then(|user|
+                        self.store
+                            .borrow_mut()
+                            .add_user(user)
+                            .clone()
+                            .map_err(AppError::StoreError)
+                    )
             )
             .then(Self::format_response)
         )
     }
 
     fn update_user(self, id: u32, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |user|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.update_user(id, user)?))
-                )
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
+                    .and_then(|user|
+                        self.store
+                            .borrow_mut()
+                            .update_user(id, user)
+                            .map_err(AppError::StoreError)
+                    )
+            )
             .then(Self::format_response)
         )
     }
 
     fn add_location(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |location|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.add_location(location)?))
-                )
-            .then(Self::format_response)
-        )
-    }
-
-    fn update_location(self, id: models::Id, body: hyper::Body) ->
-            Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |location_data|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.update_location(id, location_data)?)
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(|location|
+                    self.store
+                        .borrow_mut()
+                        .add_location(location)
+                        .map_err(AppError::StoreError)
                 )
             )
             .then(Self::format_response)
         )
     }
 
+    fn update_location(self, id: models::Id, body: hyper::Body) ->
+            Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
+                    .and_then(|location_data|
+                        self.store
+                            .borrow_mut()
+                            .update_location(id, location_data)
+                            .map_err(AppError::StoreError)
+                    )
+            )
+            .then(Self::format_response)
+        )
+    }
+
     fn add_visit(self, body: hyper::Body) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |visit|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.add_visit(visit)?))
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                .and_then(|value| Ok(serde_json::from_value(value)?))
+                .and_then(|visit|
+                    self.store
+                        .borrow_mut()
+                        .add_visit(visit)
+                        .map_err(AppError::StoreError)
                 )
+            )
             .then(Self::format_response)
         )
     }
 
     fn update_visit(self, id: models::Id, body: hyper::Body) ->
             Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(Self::parse_body(body)
-            .and_then(|value| Ok(serde_json::from_value(value)?))
-            .and_then(move |visit_data|
-                self.cpupool.clone().spawn_fn(move ||
-                    Ok(self.store.update_visit(id, visit_data)?))
-                )
+        Box::new(
+            future::result(
+                Self::parse_body(body)
+                    .and_then(|value| Ok(serde_json::from_value(value)?))
+                    .and_then(|visit_data|
+                        self.store
+                            .borrow_mut()
+                            .update_visit(id, visit_data)
+                            .map_err(AppError::StoreError)
+                    )
+            )
             .then(Self::format_response)
         )
     }
@@ -332,70 +381,48 @@ impl server::Service for Router {
 }
 
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
-const DEFAULT_SERVER_THREADS: &'static str = "1";
 const DEFAULT_BACKLOG: &'static str = "1024";
 const DEFAULT_DATA_PATH: &'static str = "data/data.zip";
-const DEFAULT_CPUPOOL_SIZE: &'static str = "1";
 
 fn main() {
     env_logger::init().unwrap();
 
     let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
         .parse().unwrap();
-    let server_thread_count = env::var("SERVER_THREADS").unwrap_or(DEFAULT_SERVER_THREADS.to_string())
-        .parse::<usize>().unwrap();
     let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
-    let cpupool_size = env::var("CPUPOOL_SIZE").unwrap_or(DEFAULT_CPUPOOL_SIZE.to_string())
-        .parse::<usize>().unwrap();
 
-    info!("Start listen {} on {} threads with backlog", address, server_thread_count);
+    let store = Rc::new(RefCell::new(store::Store::new()));
 
-    let store = Arc::new(store::Store::new());
-    let cpupool = Arc::new(futures_cpupool::CpuPool::new(cpupool_size));
-
-    loader::load_data(store.clone(), &data_path).unwrap();
+    loader::load_data(&mut store.borrow_mut(), &data_path).unwrap();
 
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
-    let threads = (0..server_thread_count).map(move |thread_index|{
-        let store = store.clone();
-        let cpupool = cpupool.clone();
-        thread::Builder::new()
-            .name(format!("Server {}", thread_index))
-            .spawn(move || {
-                info!("Start thread {}", thread_index);
-                let net_listener = net2::TcpBuilder::new_v4().unwrap()
-                    .reuse_port(true).unwrap()
-                    .bind(address).unwrap()
-                    .listen(backlog).unwrap();
+    info!("Start listen on {} with backlog {}", address, backlog);
 
-                net_listener.set_nonblocking(true).unwrap();
+    let net_listener = net2::TcpBuilder::new_v4().unwrap()
+        .reuse_port(true).unwrap()
+        .bind(address).unwrap()
+        .listen(backlog).unwrap();
 
-                let mut core = tokio_core::reactor::Core::new().unwrap();
-                let handle = core.handle();
+    net_listener.set_nonblocking(true).unwrap();
 
-                let core_listener = tokio_core::net::TcpListener::from_listener(net_listener, &address, &handle).unwrap();
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+    let handle = core.handle();
 
-                core.run(
-                    core_listener.incoming().for_each(move |(stream, socket_addr)| {
-                        stream.set_keepalive(keepalive).unwrap();
-                        stream.set_nodelay(true).unwrap();
-                        info!("Connection on thread #{} from {}", thread_index, socket_addr);
-                        let router = Router::new(store.clone(), cpupool.clone());
-                        hyper::server::Http::new()
-                            .keep_alive(true)
-                            .bind_connection(&handle, stream, socket_addr, router);
-                        Ok(())
-                    })
-                )
-            }).unwrap()
-    }).collect::<Vec<_>>();
+    let core_listener = tokio_core::net::TcpListener::from_listener(net_listener, &address, &handle).unwrap();
 
-    for join_handler in threads {
-        if let Err(err) = join_handler.join() {
-            error!("Thread error {:?}", err);
-        }
-    }
+    core.run(
+        core_listener.incoming().for_each(move |(stream, socket_addr)| {
+            stream.set_keepalive(keepalive).unwrap();
+            stream.set_nodelay(true).unwrap();
+            info!("Connection from {}", socket_addr);
+            let router = Router::new(store.clone());
+            hyper::server::Http::new()
+                .keep_alive(true)
+                .bind_connection(&handle, stream, socket_addr, router);
+            Ok(())
+        })
+    ).unwrap();
 }

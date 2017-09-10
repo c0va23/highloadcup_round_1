@@ -125,6 +125,8 @@ pub struct GetLocationAvgOptions {
     pub gender: Option<char>,
 }
 
+impl Copy for GetLocationAvgOptions {}
+
 #[derive(
     Clone,
     Debug,

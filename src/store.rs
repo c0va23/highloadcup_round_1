@@ -1,8 +1,6 @@
-use std::sync::{
-    RwLock,
-    PoisonError,
-    Arc,
-};
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use chrono::prelude::*;
 use fnv::FnvHashMap;
 
@@ -12,57 +10,40 @@ const AVG_ACCURACY: f64 = 5.0_f64;
 
 type Map<K, V> = FnvHashMap<K, V>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum StoreError {
     EntryExists,
     EntityNotExists,
-    MutexPoisoned,
     InvalidEntity(ValidationError),
 }
 
-impl<A> From<PoisonError<A>> for StoreError {
-    fn from(_err: PoisonError<A>) -> Self {
-        StoreError::MutexPoisoned
-    }
-}
-
-struct StoreInner {
-    users: Map<Id, Arc<RwLock<User>>>,
-    locations: Map<Id, Arc<RwLock<Location>>>,
-    visits: Map<Id, Arc<RwLock<Visit>>>,
-    user_visits: Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<Location>>)>>,
-    location_visits: Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<User>>)>>,
-}
-
 pub struct Store {
-    store_inner: RwLock<StoreInner>,
+    users: Map<Id, Rc<RefCell<User>>>,
+    locations: Map<Id, Rc<RefCell<Location>>>,
+    visits: Map<Id, Rc<RefCell<Visit>>>,
+    user_visits: Map<Id, Vec<(Rc<RefCell<Visit>>, Rc<RefCell<Location>>)>>,
+    location_visits: Map<Id, Vec<(Rc<RefCell<Visit>>, Rc<RefCell<User>>)>>,
 }
 
 impl Store {
     pub fn new() -> Self {
         Self {
-            store_inner: RwLock::new(StoreInner {
-                users: Map::default(),
-                locations: Map::default(),
-                visits: Map::default(),
-                user_visits: Map::default(),
-                location_visits: Map::default(),
-
-            }),
+            users: Map::default(),
+            locations: Map::default(),
+            visits: Map::default(),
+            user_visits: Map::default(),
+            location_visits: Map::default(),
         }
     }
 
     pub fn get_user(&self, id: Id) -> Result<User, StoreError> {
-        let store_inner = self.store_inner.read()?;
-        let user_mutex = store_inner.users.get(&id).ok_or(StoreError::EntityNotExists)?;
-        let user = user_mutex.read()?;
-        Ok(user.clone())
+        Ok(self.users.get(&id).map(|u| u.borrow().clone()).ok_or(StoreError::EntityNotExists)?)
     }
 
-    pub fn add_user(&self, user: User) -> Result<Empty, StoreError> {
+    pub fn add_user(&mut self, user: User) -> Result<Empty, StoreError> {
         debug!("Add user {:?}", user);
-        let mut store_inner = self.store_inner.write()?;
-        if let Some(_) = store_inner.users.get(&user.id) {
+
+        if self.users.get(&user.id).is_some() {
             return Err(StoreError::EntryExists)
         }
 
@@ -70,15 +51,14 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        store_inner.users.insert(user.id, Arc::new(RwLock::new(user)));
+        self.users.insert(user.id, Rc::new(RefCell::new(user)));
         Ok(Empty{})
     }
 
     pub fn update_user(&self, id: Id, user_data: UserData) -> Result<Empty, StoreError> {
         debug!("Update user {} {:?}", id, user_data);
-        let store_inner = self.store_inner.write()?;
-        if let Some(user) = store_inner.users.get(&id) {
-            let mut updated_user = user.read()?.clone();
+        if let Some(user) = self.users.get(&id) {
+            let mut updated_user = user.borrow().clone();
             if let Some(email) = user_data.email {
                 updated_user.email = email;
             }
@@ -97,7 +77,7 @@ impl Store {
             if let Err(error) = updated_user.valid() {
                 return Err(StoreError::InvalidEntity(error))
             }
-            *user.write()? = updated_user;
+            *user.borrow_mut() = updated_user;
             Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
@@ -105,30 +85,26 @@ impl Store {
     }
 
     pub fn get_location(&self, id: Id) -> Result<Location, StoreError> {
-        let store_inner = self.store_inner.read()?;
-        let location_mutex = store_inner.locations.get(&id).ok_or(StoreError::EntityNotExists)?;
-        let location = location_mutex.read()?;
-        Ok(location.clone())
+        Ok(self.locations.get(&id).map(|l| l.borrow().clone()).ok_or(StoreError::EntityNotExists)?)
     }
 
-    pub fn add_location(&self, location: Location) -> Result<Empty, StoreError> {
+    pub fn add_location(&mut self, location: Location) -> Result<Empty, StoreError> {
         debug!("Add location {:?}", location);
-        let mut store_inner = self.store_inner.write()?;
-        if let Some(_) = store_inner.locations.get(&location.id) {
+
+        if self.locations.get(&location.id).is_some() {
             return Err(StoreError::EntryExists)
         }
         if let Err(error) = location.valid() {
             return Err(StoreError::InvalidEntity(error))
         }
-        store_inner.locations.insert(location.id, Arc::new(RwLock::new(location)));
+        self.locations.insert(location.id, Rc::new(RefCell::new(location)));
         Ok(Empty{})
     }
 
     pub fn update_location(&self, id: Id, location_data: LocationData) -> Result<Empty, StoreError> {
         debug!("Update location {} {:?}", id, location_data);
-        let store_inner = self.store_inner.write()?;
-        if let Some(location) = store_inner.locations.get(&id) {
-            let mut updated_location = location.read()?.clone();
+        if let Some(location) = self.locations.get(&id) {
+            let mut updated_location = location.borrow().clone();
             if let Some(distance) = location_data.distance {
                 updated_location.distance = distance;
             }
@@ -144,7 +120,7 @@ impl Store {
             if let Err(error) = updated_location.valid() {
                 return Err(StoreError::InvalidEntity(error))
             }
-            *location.write()? = updated_location;
+            *location.borrow_mut() = updated_location;
             Ok(Empty{})
         } else {
             Err(StoreError::EntityNotExists)
@@ -152,103 +128,99 @@ impl Store {
     }
 
     pub fn get_visit(&self, id: Id) -> Result<Visit, StoreError> {
-        let store_inner = self.store_inner.read()?;
-        let visit_mutex = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?;
-        let visit = visit_mutex.read()?;
-        Ok(visit.clone())
+        Ok(self.visits.get(&id).map(|v| v.borrow().clone()).ok_or(StoreError::EntityNotExists)?)
     }
 
     fn add_visit_to_user(
-        user_visits: &mut Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<Location>>)>>,
-        visit: Arc<RwLock<Visit>>,
-        location: Arc<RwLock<Location>>,
-    ) -> Result<(), StoreError> {
-        let visit_value = visit.read()?;
-        let user_visits = user_visits.entry(visit_value.user).or_insert(Vec::new());
+        &mut self,
+        visit: Rc<RefCell<Visit>>,
+        location: Rc<RefCell<Location>>,
+    ) {
+        let (user, visited_at) = {
+            let v = visit.borrow();
+            (v.user, v.visited_at)
+        };
 
-        let position = user_visits.iter()
-            .map(|&(ref v, ref _l)| Ok(v.read()?.visited_at))
-            .collect::<Result<Vec<Timestamp>, PoisonError<_>>>()?
-            .iter()
-            .position(|visited_at| visit_value.visited_at < *visited_at);
+        let user_visits = self.user_visits.entry(user).or_insert(Vec::new());
+
+        let position = user_visits.iter().position(|&(ref visit, _)|
+            visited_at < visit.borrow().visited_at
+        );
+
+        let pair = (visit.clone(), location.clone());
 
         match position {
-            Some(position) => {
-                user_visits.insert(position, (visit.clone(), location.clone()));
-            },
-            None => {
-                user_visits.push((visit.clone(), location.clone()));
-            },
+            Some(position) => user_visits.insert(position, pair),
+            None => user_visits.push(pair),
         }
-        Ok(())
     }
 
     fn remove_visit_from_user(
-        user_visits: &mut Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<Location>>)>>,
+        &mut self,
         visit: &Visit,
-    ) -> Result<(), StoreError> {
-        let user_visits = user_visits.entry(visit.user).or_insert(Vec::new());
-        let position = user_visits.iter()
-            .map(|&(ref v, ref _l)| Ok(v.read()?.id))
-            .collect::<Result<Vec<Id>, PoisonError<_>>>()?
-            .iter().position(|visit_id| *visit_id == visit.id);
+    ) {
+        let user_visits = self.user_visits.entry(visit.user).or_insert(Vec::new());
+        let position = user_visits.iter().position(|&(ref v, _)|
+            visit.id == v.borrow().id
+        );
+
         if let Some(position) = position {
             user_visits.remove(position);
         } else {
             error!("Visit {} not found on user {}", visit.id, visit.user);
         }
-        Ok(())
     }
 
     fn add_visit_to_location(
-        location_visits: &mut Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<User>>)>>,
-        visit: Arc<RwLock<Visit>>,
-        user: Arc<RwLock<User>>,
-    ) -> Result<(), StoreError> {
-        let location_visit_ids = location_visits.entry(visit.read()?.location).or_insert(Vec::new());
-        location_visit_ids.push((visit.clone(), user.clone()));
-        Ok(())
+        &mut self,
+        visit: Rc<RefCell<Visit>>,
+        user: Rc<RefCell<User>>,
+    ) {
+        let location_visits = self.location_visits
+            .entry(visit.borrow().location)
+            .or_insert(Vec::new());
+        location_visits.push((visit.clone(), user.clone()));
     }
 
     fn remove_visit_from_location(
-        location_visits: &mut Map<Id, Vec<(Arc<RwLock<Visit>>, Arc<RwLock<User>>)>>,
+        &mut self,
         visit: &Visit,
-    ) -> Result<(), StoreError> {
-        let location_visits = location_visits.entry(visit.location).or_insert(Vec::new());
-        let position = location_visits.iter().map(|&(ref v, ref _u)| Ok(v.read()?.id))
-            .collect::<Result<Vec<Id>, PoisonError<_>>>()?
-            .iter().position(|visit_id| *visit_id == visit.id);
+    ) {
+        let location_visits = self.location_visits.entry(visit.location).or_insert(Vec::new());
+
+        let position = location_visits.iter().position(|&(ref v, _)|
+            v.borrow().id == visit.id
+        );
+
         if let Some(position) = position {
             location_visits.remove(position);
         } else {
             error!("Visit {} not found on location {}", visit.id, visit.location);
         }
-        Ok(())
     }
 
-    fn get_visit_user(store_inner: &StoreInner, visit: &Visit) -> Result<Arc<RwLock<User>>, StoreError> {
-        store_inner.users.get(&visit.user).ok_or_else(||
+    fn get_visit_user(&self, user_id: Id) -> Result<Rc<RefCell<User>>, StoreError> {
+        self.users.get(&user_id).ok_or_else(||
             StoreError::InvalidEntity(ValidationError{
                 field: "user".to_string(),
-                message: format!("User with ID {} not exists", visit.user),
+                message: format!("User with ID {} not exists", user_id),
             })
         ).map(|u| u.clone())
     }
 
-    fn get_visit_location(store_inner: &StoreInner, visit: &Visit) -> Result<Arc<RwLock<Location>>, StoreError> {
-        store_inner.locations.get(&visit.location).ok_or_else(||
+    fn get_visit_location(&self, location_id: Id) -> Result<Rc<RefCell<Location>>, StoreError> {
+        self.locations.get(&location_id).ok_or_else(||
             StoreError::InvalidEntity(ValidationError{
                 field: "location".to_string(),
-                message: format!("Location with ID {} not exists", visit.location),
+                message: format!("Location with ID {} not exists", location_id),
             })
         ).map(|l| l.clone())
     }
 
-    pub fn add_visit(&self, visit: Visit) -> Result<Empty, StoreError> {
+    pub fn add_visit(&mut self, visit: Visit) -> Result<Empty, StoreError> {
         debug!("Add visit {:?}", visit);
-        let mut store_inner = self.store_inner.write()?;
 
-        if store_inner.visits.get(&visit.id).is_some() {
+        if self.visits.get(&visit.id).is_some() {
             return Err(StoreError::EntryExists)
         }
 
@@ -256,25 +228,24 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        let user = Self::get_visit_user(&store_inner, &visit)?.clone();
-        let location = Self::get_visit_location(&store_inner, &visit)?.clone();
+        let user = self.get_visit_user(visit.user)?.clone();
+        let location = self.get_visit_location(visit.location)?.clone();
 
         let visit_id = visit.id;
-        let visit_arc = Arc::new(RwLock::new(visit));
+        let visit_arc = Rc::new(RefCell::new(visit));
 
-        Self::add_visit_to_user(&mut store_inner.user_visits, visit_arc.clone(), location)?;
-        Self::add_visit_to_location(&mut store_inner.location_visits, visit_arc.clone(), user)?;
+        self.add_visit_to_user(visit_arc.clone(), location);
+        self.add_visit_to_location(visit_arc.clone(), user);
 
-        store_inner.visits.insert(visit_id, visit_arc.clone());
+        self.visits.insert(visit_id, visit_arc.clone());
         Ok(Empty{})
     }
 
-    pub fn update_visit(&self, id: Id, visit_data: VisitData) -> Result<Empty, StoreError> {
+    pub fn update_visit(&mut self, id: Id, visit_data: VisitData) -> Result<Empty, StoreError> {
         debug!("Update visit {} {:?}", id, visit_data);
-        let mut store_inner = self.store_inner.write()?;
 
-        let visit = store_inner.visits.get(&id).ok_or(StoreError::EntityNotExists)?.clone();
-        let original_visit = visit.read()?.clone();
+        let visit = self.visits.get(&id).ok_or(StoreError::EntityNotExists)?.clone();
+        let original_visit = visit.borrow().clone();
         debug!("Original visit {:?}", original_visit);
 
         let mut updated_visit = original_visit.clone();
@@ -295,23 +266,23 @@ impl Store {
         }
         debug!("Updated visit {:?}", updated_visit);
 
-        let location = Self::get_visit_location(&store_inner, &updated_visit)?.clone();
-        let user = Self::get_visit_user(&store_inner, &updated_visit)?.clone();
+        let location = self.get_visit_location(updated_visit.location)?.clone();
+        let user = self.get_visit_user(updated_visit.user)?.clone();
 
         debug!("Replace visit {:?} wiht {:?}", visit, updated_visit);
-        *visit.write()? = updated_visit.clone();
+        *visit.borrow_mut() = updated_visit.clone();
 
         if original_visit.user != updated_visit.user ||
                 original_visit.visited_at != updated_visit.visited_at ||
                 original_visit.location != updated_visit.location {
             debug!("Update visit user from {} to {}", original_visit.user, updated_visit.user);
-            Self::remove_visit_from_user(&mut store_inner.user_visits, &original_visit)?;
-            Self::add_visit_to_user(&mut store_inner.user_visits, visit.clone(), location)?;
+            self.remove_visit_from_user(&original_visit);
+            self.add_visit_to_user(visit.clone(), location);
         }
         if original_visit.location != updated_visit.location {
             debug!("Update visit locatoin from {} to {}", original_visit.location, updated_visit.location);
-            Self::remove_visit_from_location(&mut store_inner.location_visits, &original_visit)?;
-            Self::add_visit_to_location(&mut store_inner.location_visits, visit.clone(), user)?;
+            self.remove_visit_from_location(&original_visit);
+            self.add_visit_to_location(visit.clone(), user);
         }
 
         Ok(Empty{})
@@ -320,23 +291,21 @@ impl Store {
     pub fn get_user_visits(&self, user_id: Id, options: GetUserVisitsOptions) ->
             Result<UserVisits, StoreError> {
         debug!("Get user {} visits by {:?}", user_id, options);
-        let store_inner = self.store_inner.read()?;
-        if store_inner.users.get(&user_id).is_none() {
+
+        if self.users.get(&user_id).is_none() {
             return Err(StoreError::EntityNotExists)
         }
 
-        let user_visit_ids = match store_inner.user_visits.get(&user_id) {
-            Some(user_visit_ids) => user_visit_ids.clone(),
+        let user_visits = match self.user_visits.get(&user_id) {
+            Some(user_visits) => user_visits.clone(),
             None => return Ok(UserVisits::default()),
         };
 
-        let user_visits = user_visit_ids
+        let user_visits = user_visits
             .iter()
             .map(|&(ref v, ref l)|
-                Ok((v.read()?.clone(), l.read()?.clone()))
+                (v.borrow(), l.borrow())
             )
-            .collect::<Result<Vec<(Visit, Location)>, StoreError>>()?
-            .into_iter()
             .filter(|&(ref v, ref l)| {
                 (if let Some(from_date) = options.from_date { from_date < v.visited_at  } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
@@ -360,13 +329,12 @@ impl Store {
     pub fn get_location_avg(&self, location_id: Id, options: GetLocationAvgOptions) ->
             Result<LocationRate, StoreError> {
         debug!("Find location {} avg by {:?}", location_id, options);
-        let store_inner = self.store_inner.read()?;
 
-        if store_inner.locations.get(&location_id).is_none() {
+        if self.locations.get(&location_id).is_none() {
             return Err(StoreError::EntityNotExists)
         }
 
-        let location_visits = match store_inner.location_visits.get(&location_id) {
+        let location_visits = match self.location_visits.get(&location_id) {
             Some(ids) => ids.clone(),
             None => return Ok(LocationRate::default()),
         };
@@ -386,9 +354,9 @@ impl Store {
 
         let (sum_mark, count_mark) = location_visits
             .iter()
-            .map(|&(ref v, ref u)| Ok((v.read()?.clone(), u.read()?.clone())))
-            .collect::<Result<Vec<(Visit, User)>, StoreError>>()?
-            .into_iter()
+            .map(|&(ref v, ref u)|
+                (v.borrow(), u.borrow())
+            )
             .filter(|&(ref v, ref u)| {
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
@@ -477,7 +445,7 @@ mod tests {
     fn update_visit_with_all_valid_fields() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let old_user = old_user();
         store.add_user(old_user.clone()).unwrap();
@@ -554,7 +522,7 @@ mod tests {
     fn update_visit_with_valid_mark() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -606,7 +574,7 @@ mod tests {
     fn update_visit_with_valid_visited_at() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -664,7 +632,7 @@ mod tests {
     fn update_visit_with_invalid_location() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -692,7 +660,7 @@ mod tests {
     fn update_visit_with_invalid_user() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -720,7 +688,7 @@ mod tests {
     fn update_location_with_valid_fields() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -761,7 +729,7 @@ mod tests {
     fn complex_update() {
         setup();
 
-        let store = Store::new();
+        let mut store = Store::new();
 
         let user = new_user();
         store.add_user(user.clone()).unwrap();
