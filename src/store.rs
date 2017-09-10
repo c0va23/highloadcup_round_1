@@ -457,7 +457,7 @@ mod tests {
     fn update_visit_with_all_valid_fields() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let old_user = old_user();
         store.add_user(old_user.clone()).unwrap();
@@ -534,7 +534,7 @@ mod tests {
     fn update_visit_with_valid_mark() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -586,7 +586,7 @@ mod tests {
     fn update_visit_with_valid_visited_at() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -644,7 +644,7 @@ mod tests {
     fn update_visit_with_invalid_location() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -672,7 +672,7 @@ mod tests {
     fn update_visit_with_invalid_user() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -700,7 +700,7 @@ mod tests {
     fn update_location_with_valid_fields() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -741,7 +741,7 @@ mod tests {
     fn complex_update() {
         setup();
 
-        let mut store = Store::new();
+        let store = Store::new();
 
         let user = new_user();
         store.add_user(user.clone()).unwrap();
