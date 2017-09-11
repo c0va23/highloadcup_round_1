@@ -286,7 +286,7 @@ impl Store {
             self.remove_visit_from_user(&original_visit);
             self.add_visit_to_user(visit.clone(), location);
         }
-        if original_visit.location != updated_visit.location {
+        if original_visit.location != updated_visit.location || original_visit.user != updated_visit.user {
             debug!("Update visit locatoin from {} to {}", original_visit.location, updated_visit.location);
             self.remove_visit_from_location(&original_visit);
             self.add_visit_to_location(visit.clone(), user);
@@ -390,10 +390,16 @@ impl Store {
 mod tests {
     use super::*;
     use env_logger;
+    use chrono::Utc;
 
     #[allow(unused_must_use)]
     fn setup() {
         env_logger::init();
+    }
+
+    fn year_ago(age: i32) -> Timestamp {
+        let now = Utc::now();
+        now.with_year(now.year() - age).unwrap().timestamp()
     }
 
     fn old_user() -> User {
@@ -403,7 +409,7 @@ mod tests {
             first_name: "Vasia".into(),
             last_name: "Pupkin".into(),
             gender: 'm',
-            birth_date: 315532800, // 1980-01-01T00:00:00
+            birth_date: year_ago(70),
         }
     }
 
@@ -414,7 +420,7 @@ mod tests {
             first_name: "Dasha".into(),
             last_name: "Petrova".into(),
             gender: 'f',
-            birth_date: 631152000, // 1990-01-01T00:00:00
+            birth_date: year_ago(25),
         }
     }
 
@@ -444,7 +450,7 @@ mod tests {
             user: user.id,
             location: location.id,
             mark: 3,
-            visited_at: 1262304000, // 2010-01-01T00:00:00
+            visited_at: year_ago(5)
         }
     }
 
@@ -473,7 +479,7 @@ mod tests {
             location: Some(new_location.id),
             user: Some(new_user.id),
             mark: Some(4),
-            visited_at: Some(1293840000), // 2011-01-01T00:00:00
+            visited_at: Some(year_ago(4)),
         };
 
         assert!(store.update_visit(visit.id, visit_data.clone()).is_ok());
@@ -636,6 +642,17 @@ mod tests {
         assert_eq!(
             store.get_location_avg(location.id, GetLocationAvgOptions::default()),
             Ok(LocationRate { avg: visit.mark as f64 })
+        );
+
+        assert_eq!(
+            store.get_location_avg(
+                location.id,
+                GetLocationAvgOptions {
+                    from_age: Some(40),
+                    ..GetLocationAvgOptions::default()
+                },
+            ),
+            Ok(LocationRate { avg: 0.0 })
         );
     }
 
