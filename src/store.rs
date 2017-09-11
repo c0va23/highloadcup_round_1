@@ -235,8 +235,8 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        let user = self.get_visit_user(visit.user)?.clone();
-        let location = self.get_visit_location(visit.location)?.clone();
+        let user = self.get_visit_user(visit.user)?;
+        let location = self.get_visit_location(visit.location)?;
 
         let visit_id = visit.id;
         let visit_arc = Rc::new(RefCell::new(visit));
@@ -244,7 +244,7 @@ impl Store {
         self.add_visit_to_user(visit_arc.clone(), location);
         self.add_visit_to_location(visit_arc.clone(), user);
 
-        self.visits.borrow_mut().insert(visit_id, visit_arc.clone());
+        self.visits.borrow_mut().insert(visit_id, visit_arc);
         Ok(Empty{})
     }
 
