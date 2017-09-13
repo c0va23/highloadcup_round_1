@@ -371,7 +371,7 @@ impl Store {
                 && if let Some(from_age) = from_age { u.birth_date < from_age } else { true }
                 && if let Some(to_age) = to_age { u.birth_date > to_age } else { true }
             })
-            .fold((0, 0), |(sum, count), (ref v, ref _v)| (sum + v.mark, count + 1));
+            .fold((0u64, 0u64), |(sum, count), (ref v, ref _v)| (sum + v.mark as u64, count + 1));
 
         if 0 == count_mark {
             return Ok(LocationRate::default());
@@ -888,5 +888,29 @@ mod tests {
                 ],
             })
         );
+    }
+
+    #[test]
+    fn get_location_avg_overflow() {
+        let store = Store::new();
+
+        let user = new_user();
+        store.add_user(user.clone()).unwrap();
+
+        let location = old_location();
+        store.add_location(location.clone()).unwrap();
+
+        for i in 0_u32..100_u32 {
+            let visit = Visit {
+                id: i,
+                user: user.id,
+                location: location.id,
+                mark: 5,
+                visited_at: 0,
+            };
+            store.add_visit(visit).unwrap();
+        }
+
+        assert_eq!(store.get_location_avg(location.id, Default::default()), Ok(LocationRate{ avg: 5.0 }));
     }
 }
