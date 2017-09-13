@@ -339,7 +339,7 @@ impl server::Service for Router {
 
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 const DEFAULT_BACKLOG: &'static str = "1024";
-const DEFAULT_DATA_PATH: &'static str = "data/data.zip";
+const DEFAULT_DATA_PATH: &'static str = "data";
 
 fn main() {
     env_logger::init().unwrap();
@@ -350,7 +350,9 @@ fn main() {
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
 
-    let store = Arc::new(loader::load_data(&data_path).unwrap());
+    let options = loader::load_options(&data_path).unwrap();
+    let store = Arc::new(store::Store::new(options.generated_at));
+    loader::load_data(&store.clone(), &data_path).unwrap();
 
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 

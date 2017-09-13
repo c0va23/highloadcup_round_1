@@ -63,9 +63,10 @@ pub struct Options {
     pub is_full: bool,
 }
 
-fn parse_options(file: &mut io::Read) -> Result<Options, Error> {
+pub fn load_options(data_dir: &str) -> Result<Options, Error> {
     use std::io::BufRead;
 
+    let file = fs::File::open(data_dir.to_string() + "/options.txt")?;
     let lines = io::BufReader::new(file).lines().collect::<Result<Vec<String>, io::Error>>()?;
 
     if lines.len() != 2 {
@@ -80,12 +81,9 @@ fn parse_options(file: &mut io::Read) -> Result<Options, Error> {
     })
 }
 
-pub fn load_data(file_path: &str) -> Result<store::Store, Error> {
-    let reader = fs::File::open(file_path)?;
+pub fn load_data(store: &store::Store, data_dir: &str) -> Result<(), Error> {
+    let reader = fs::File::open(data_dir.to_string() + "/data.zip")?;
     let mut archive = zip::ZipArchive::new(reader)?;
-
-    let options = parse_options(&mut archive.by_name("options.txt")?)?;
-    let store = store::Store::new(options.generated_at);
 
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
@@ -116,5 +114,5 @@ pub fn load_data(file_path: &str) -> Result<store::Store, Error> {
         }
     }
 
-    Ok(store)
+    Ok(())
 }
