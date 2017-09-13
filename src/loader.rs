@@ -1,6 +1,7 @@
 use zip;
 use std::fs;
 use std::io;
+use std::num;
 use serde_json;
 
 use super::store;
@@ -12,6 +13,10 @@ pub enum Error {
     ZipError(zip::result::ZipError),
     JsonError(serde_json::Error),
     StoreError(store::StoreError),
+    InvalidOptinsLines {
+        lines: usize,
+    },
+    InvalidOptinsTime(num::ParseIntError),
 }
 
 impl From<io::Error> for Error {
@@ -53,9 +58,35 @@ struct VisitsData {
     visits: Vec<models::Visit>,
 }
 
-pub fn load_data(store: &store::Store, file_path: &str) -> Result<(), Error> {
+pub struct Options {
+    pub generated_at: models::Timestamp,
+    pub is_full: bool,
+}
+
+fn parse_options(file: &mut io::Read) -> Result<Options, Error> {
+    use std::io::BufRead;
+
+    let lines = io::BufReader::new(file).lines().collect::<Result<Vec<String>, io::Error>>()?;
+
+    if lines.len() != 2 {
+        return Err(Error::InvalidOptinsLines {
+            lines: lines.len(),
+        })
+    }
+
+    Ok(Options {
+        generated_at: lines[0].parse().map_err(Error::InvalidOptinsTime)?,
+        is_full: lines[1] == "1",
+    })
+}
+
+pub fn load_data(file_path: &str) -> Result<store::Store, Error> {
     let reader = fs::File::open(file_path)?;
     let mut archive = zip::ZipArchive::new(reader)?;
+
+    let options = parse_options(&mut archive.by_name("options.txt")?)?;
+    let store = store::Store::new(options.generated_at);
+
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
         let file_name = file.name().to_string();
@@ -84,5 +115,6 @@ pub fn load_data(store: &store::Store, file_path: &str) -> Result<(), Error> {
             }
         }
     }
-    Ok(())
+
+    Ok(store)
 }

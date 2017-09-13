@@ -18,6 +18,7 @@ pub enum StoreError {
 }
 
 pub struct Store {
+    now: DateTime<Utc>,
     users: RefCell<Map<Id, Rc<RefCell<User>>>>,
     locations: RefCell<Map<Id, Rc<RefCell<Location>>>>,
     visits: RefCell<Map<Id, Rc<RefCell<Visit>>>>,
@@ -26,8 +27,13 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new() -> Self {
+    pub fn new(now: Timestamp) -> Self {
+        let now = DateTime::<Utc>::from_utc(
+            NaiveDateTime::from_timestamp(now, 0),
+            Utc,
+        );
         Self {
+            now: now,
             users: RefCell::new(Map::default()),
             locations: RefCell::new(Map::default()),
             visits: RefCell::new(Map::default()),
@@ -346,23 +352,24 @@ impl Store {
             None => return Ok(LocationRate::default()),
         };
 
-        debug!("Location visits: {:?}", location_visits);
+        info!("Location visits: {:?}", location_visits);
 
-        let now = Utc::now();
-        debug!("Now {}", now);
+        debug!("Now {}", self.now);
 
-        let from_age = options.from_age.and_then(|from_age| now.with_year(now.year() - from_age))
+        let from_age = options.from_age
+            .and_then(|from_age| self.now.with_year(self.now.year() - from_age))
             .map(|t| t.timestamp());
         debug!("Age from {:?}", from_age);
 
-        let to_age = options.to_age.and_then(|to_age| now.with_year(now.year() - to_age))
+        let to_age = options.to_age
+            .and_then(|to_age| self.now.with_year(self.now.year() - to_age))
             .map(|t| t.timestamp());
         debug!("Age to {:?}", to_age);
 
-        let (sum_mark, count_mark) = location_visits
+        let filtered_location_visits = location_visits
             .iter()
             .map(|&(ref v, ref u)|
-                (v.borrow(), u.borrow())
+                (v.borrow().clone(), u.borrow().clone())
             )
             .filter(|&(ref v, ref u)| {
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
@@ -370,8 +377,14 @@ impl Store {
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
                 && if let Some(from_age) = from_age { u.birth_date < from_age } else { true }
                 && if let Some(to_age) = to_age { u.birth_date > to_age } else { true }
-            })
-            .fold((0u64, 0u64), |(sum, count), (ref v, ref _v)| (sum + v.mark as u64, count + 1));
+            }).collect::<Vec<(Visit, User)>>();
+
+        info!("Filtered location vistis: {:?}", filtered_location_visits);
+
+        let (sum_mark, count_mark) = filtered_location_visits.iter()
+            .fold((0u64, 0u64), |(sum, count), &(ref v, ref _v)| (sum + v.mark as u64, count + 1));
+
+        info!("Sum/count: {}/{}", sum_mark, count_mark);
 
         if 0 == count_mark {
             return Ok(LocationRate::default());
@@ -400,6 +413,10 @@ mod tests {
     fn year_ago(age: i32) -> Timestamp {
         let now = Utc::now();
         now.with_year(now.year() - age).unwrap().timestamp()
+    }
+
+    fn create_store() -> Store {
+        Store::new(Utc::now().timestamp())
     }
 
     fn old_user() -> User {
@@ -458,7 +475,7 @@ mod tests {
     fn update_visit_with_all_valid_fields() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let old_user = old_user();
         store.add_user(old_user.clone()).unwrap();
@@ -535,7 +552,7 @@ mod tests {
     fn update_visit_with_valid_mark() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -587,7 +604,7 @@ mod tests {
     fn update_visit_with_valid_user() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let old_user = old_user();
         store.add_user(old_user.clone()).unwrap();
@@ -660,7 +677,7 @@ mod tests {
     fn update_visit_with_valid_visited_at() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -718,7 +735,7 @@ mod tests {
     fn update_visit_with_invalid_location() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -746,7 +763,7 @@ mod tests {
     fn update_visit_with_invalid_user() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -774,7 +791,7 @@ mod tests {
     fn update_location_with_valid_fields() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = old_user();
         store.add_user(user.clone()).unwrap();
@@ -815,7 +832,7 @@ mod tests {
     fn complex_update() {
         setup();
 
-        let store = Store::new();
+        let store = create_store();
 
         let user = new_user();
         store.add_user(user.clone()).unwrap();
@@ -892,7 +909,7 @@ mod tests {
 
     #[test]
     fn get_location_avg_overflow() {
-        let store = Store::new();
+        let store = create_store();
 
         let user = new_user();
         store.add_user(user.clone()).unwrap();

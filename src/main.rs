@@ -350,9 +350,7 @@ fn main() {
         .parse::<i32>().unwrap();
     let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
 
-    let store = Arc::new(store::Store::new());
-
-    loader::load_data(&store.clone(), &data_path).unwrap();
+    let store = Arc::new(loader::load_data(&data_path).unwrap());
 
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
