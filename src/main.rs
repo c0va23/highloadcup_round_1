@@ -83,14 +83,17 @@ impl<'a, T> From<std::sync::PoisonError<std::sync::RwLockWriteGuard<'a, T>>> for
 #[derive(Clone)]
 struct Router {
     store: Arc<store::Store>,
+    handler: tokio_core::reactor::Handle,
 }
 
 impl Router {
     fn new(
         store: Arc<store::Store>,
+        handler: tokio_core::reactor::Handle,
     ) -> Self {
         Self {
             store: store,
+            handler: handler,
         }
     }
 
@@ -296,6 +299,23 @@ impl Router {
             _ => None,
         }
     }
+
+    const REQUEST_TIMEOUT: u64 = 5;
+
+    fn timeout(&self) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
+        Box::new(
+            future::result(
+                tokio_core::reactor::Timeout::new(
+                    std::time::Duration::new(Self::REQUEST_TIMEOUT, 0),
+                    &self.handler.clone(),
+                )
+            )
+            .map_err(hyper::Error::Io)
+            .and_then(|_|
+                Ok(server::Response::new().with_status(hyper::StatusCode::InternalServerError))
+            )
+        )
+    }
 }
 
 impl server::Service for Router {
@@ -348,7 +368,9 @@ impl server::Service for Router {
             } else {
                 response
             }
-        );
+        ).select(self.timeout())
+        .map(|(first, _)| first)
+        .map_err(|(first, _)| first);
 
         Box::new(result)
     }
@@ -386,7 +408,7 @@ fn start_server(store: Arc<store::Store>, config: &Config) {
             stream.set_keepalive(keepalive).unwrap();
             stream.set_nodelay(true).unwrap();
             info!("Connection from {}", socket_addr);
-            let router = Router::new(store.clone());
+            let router = Router::new(store.clone(), handle.clone());
             hyper::server::Http::new()
                 .keep_alive(true)
                 .bind_connection(&handle, stream, socket_addr, router);
