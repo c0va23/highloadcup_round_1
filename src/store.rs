@@ -352,7 +352,7 @@ impl Store {
             None => return Ok(LocationRate::default()),
         };
 
-        info!("Location visits: {:?}", location_visits);
+        debug!("Location visits: {:?}", location_visits);
 
         debug!("Now {}", self.now);
 
@@ -379,12 +379,12 @@ impl Store {
                 && if let Some(to_age) = to_age { u.birth_date > to_age } else { true }
             }).collect::<Vec<(Visit, User)>>();
 
-        info!("Filtered location vistis: {:?}", filtered_location_visits);
+        debug!("Filtered location vistis: {:?}", filtered_location_visits);
 
         let (sum_mark, count_mark) = filtered_location_visits.iter()
             .fold((0u64, 0u64), |(sum, count), &(ref v, ref _v)| (sum + v.mark as u64, count + 1));
 
-        info!("Sum/count: {}/{}", sum_mark, count_mark);
+        debug!("Sum/count: {}/{}", sum_mark, count_mark);
 
         if 0 == count_mark {
             return Ok(LocationRate::default());
