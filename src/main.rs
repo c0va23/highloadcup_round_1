@@ -281,6 +281,21 @@ impl Router {
                 .then(Self::format_response)
         )
     }
+
+    fn connection_header(http_version: hyper::HttpVersion, headers: &hyper::Headers) ->
+        Option<hyper::header::Connection>
+    {
+        use hyper::header::*;
+        use hyper::HttpVersion::*;
+
+        match (http_version, headers.get::<Connection>()) {
+            (Http10, Some(client_connection)) | (Http11, Some(client_connection)) =>
+                Some(client_connection.clone()),
+            (Http11, None) =>
+                Some(Connection::keep_alive()),
+            _ => None,
+        }
+    }
 }
 
 impl server::Service for Router {
@@ -290,8 +305,10 @@ impl server::Service for Router {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        let (method, uri, _, _, body) = req.deconstruct();
+        let (method, uri, http_version, headers, body) = req.deconstruct();
         let mut path_parts = uri.path().split('/').skip(1);
+
+        let connection_header = Self::connection_header(http_version, &headers);
 
         let result = match (method, path_parts.next(), path_parts.next(), path_parts.next(),
                 path_parts.next()) {
@@ -325,12 +342,12 @@ impl server::Service for Router {
                     _ => Self::not_found(),
                 }
             _ => Self::not_found(),
-        }.map(|response|
-            response.with_header(
-                hyper::header::Connection(
-                    vec!(hyper::header::ConnectionOption::KeepAlive)
-                )
-            )
+        }.map(move |response|
+            if let Some(connection_header) =  connection_header {
+                response.with_header(connection_header)
+            } else {
+                response
+            }
         );
 
         Box::new(result)
