@@ -341,34 +341,28 @@ const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 const DEFAULT_BACKLOG: &'static str = "1024";
 const DEFAULT_DATA_PATH: &'static str = "data";
 
-fn main() {
-    env_logger::init().unwrap();
+struct Config {
+    address: std::net::SocketAddr,
+    backlog: i32,
+    data_path: String,
+}
 
-    let address = env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
-        .parse().unwrap();
-    let backlog = env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
-        .parse::<i32>().unwrap();
-    let data_path = env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string());
-
-    let options = loader::load_options(&data_path).unwrap();
-    let store = Arc::new(store::Store::new(options.generated_at));
-    loader::load_data(&store.clone(), &data_path).unwrap();
-
+fn start_server(store: Arc<store::Store>, config: &Config) {
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
-    info!("Start listen on {} with backlog {}", address, backlog);
+    info!("Start listen on {} with backlog {}", config.address, config.backlog);
 
     let net_listener = net2::TcpBuilder::new_v4().unwrap()
         .reuse_port(true).unwrap()
-        .bind(address).unwrap()
-        .listen(backlog).unwrap();
+        .bind(config.address).unwrap()
+        .listen(config.backlog).unwrap();
 
     net_listener.set_nonblocking(true).unwrap();
 
     let mut core = tokio_core::reactor::Core::new().unwrap();
     let handle = core.handle();
 
-    let core_listener = tokio_core::net::TcpListener::from_listener(net_listener, &address, &handle).unwrap();
+    let core_listener = tokio_core::net::TcpListener::from_listener(net_listener, &config.address, &handle).unwrap();
 
     core.run(
         core_listener.incoming().for_each(move |(stream, socket_addr)| {
@@ -382,4 +376,22 @@ fn main() {
             Ok(())
         })
     ).unwrap();
+}
+
+fn main() {
+    env_logger::init().unwrap();
+
+    let config = Config {
+        address: env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
+            .parse().unwrap(),
+        backlog: env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
+            .parse::<i32>().unwrap(),
+        data_path: env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string()),
+    };
+
+    let options = loader::load_options(&config.data_path).unwrap();
+    let store = Arc::new(store::Store::new(options.generated_at));
+    loader::load_data(&store.clone(), &config.data_path).unwrap();
+
+    start_server(store.clone(), &config);
 }
