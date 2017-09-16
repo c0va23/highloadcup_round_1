@@ -81,36 +81,52 @@ pub fn load_options(data_dir: &str) -> Result<Options, Error> {
     })
 }
 
+const JSON_SUFIX: &'static str = ".json";
+
+fn get_sorted_file_names(archive: &mut zip::ZipArchive<fs::File>, prefix: &str) -> Result<Vec<String>, Error> {
+    let mut file_names = Vec::new();
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        let file_name = file.name().to_string();
+        if file_name.starts_with(prefix) && file_name.ends_with(JSON_SUFIX) {
+            file_names.push(file_name)
+        }
+    }
+    file_names.sort_by(|left_filne_name, right_file_name| {
+        let left_index: usize = left_filne_name[prefix.len()..(left_filne_name.len()-JSON_SUFIX.len())].parse().unwrap();
+        let right_index: usize = right_file_name[prefix.len()..(right_file_name.len()-JSON_SUFIX.len())].parse().unwrap();
+        left_index.cmp(&right_index)
+    });
+    Ok(file_names)
+}
+
 pub fn load_data(store: &mut store::Store, data_dir: &str) -> Result<(), Error> {
     let reader = fs::File::open(data_dir.to_string() + "/data.zip")?;
     let mut archive = zip::ZipArchive::new(reader)?;
 
-    for i in 0..archive.len() {
-        let file = archive.by_index(i)?;
-        let file_name = file.name().to_string();
-        if file_name.starts_with("locations_") {
-            debug!("Load file {}", file_name);
-            let locations_data: LocationsData = serde_json::from_reader(file)?;
-            for location in locations_data.locations {
-                store.add_location(location)?;
-            }
-        } else if file_name.starts_with("users_") {
-            debug!("Load file {}", file_name);
-            let users_data: UsersData = serde_json::from_reader(file)?;
-            for user in users_data.users {
-                store.add_user(user)?;
-            }
+    for file_name in get_sorted_file_names(&mut archive, "locations_")?.iter() {
+        let file = archive.by_name(file_name)?;
+        debug!("Load file {}", file_name);
+        let locations_data: LocationsData = serde_json::from_reader(file)?;
+        for location in locations_data.locations {
+            store.add_location(location)?;
         }
     }
-    for i in 0..archive.len() {
-        let file = archive.by_index(i)?;
-        let file_name = file.name().to_string();
-        if file_name.starts_with("visits_") {
-            debug!("Load file {}", file_name);
-            let visits_data: VisitsData = serde_json::from_reader(file)?;
-            for visit in visits_data.visits {
-                store.add_visit(visit)?;
-            }
+    for file_name in get_sorted_file_names(&mut archive, "users_")?.iter() {
+        let file = archive.by_name(file_name)?;
+        debug!("Load file {}", file_name);
+        let users_data: UsersData = serde_json::from_reader(file)?;
+        for user in users_data.users {
+            store.add_user(user)?;
+        }
+    }
+
+    for file_name in get_sorted_file_names(&mut archive, "visits_")?.iter() {
+        let file = archive.by_name(file_name)?;
+        debug!("Load file {}", file_name);
+        let visits_data: VisitsData = serde_json::from_reader(file)?;
+        for visit in visits_data.visits {
+            store.add_visit(visit)?;
         }
     }
 
