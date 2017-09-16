@@ -81,7 +81,7 @@ pub fn load_options(data_dir: &str) -> Result<Options, Error> {
     })
 }
 
-pub fn load_data(store: &store::Store, data_dir: &str) -> Result<(), Error> {
+pub fn load_data(store: &mut store::Store, data_dir: &str) -> Result<(), Error> {
     let reader = fs::File::open(data_dir.to_string() + "/data.zip")?;
     let mut archive = zip::ZipArchive::new(reader)?;
 

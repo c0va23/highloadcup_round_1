@@ -18,8 +18,6 @@ extern crate zip;
 
 extern crate chrono;
 
-extern crate fnv;
-
 #[cfg(test)]
 #[macro_use]
 extern crate matches;
@@ -82,13 +80,13 @@ impl<'a, T> From<std::sync::PoisonError<std::sync::RwLockWriteGuard<'a, T>>> for
 
 #[derive(Clone)]
 struct Router {
-    store: Arc<store::Store>,
+    store: Arc<store::StoreWrapper>,
     handler: tokio_core::reactor::Handle,
 }
 
 impl Router {
     fn new(
-        store: Arc<store::Store>,
+        store: Arc<store::StoreWrapper>,
         handler: tokio_core::reactor::Handle,
     ) -> Self {
         Self {
@@ -108,6 +106,8 @@ impl Router {
                 hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntryExists) |
             AppError::StoreError(store::StoreError::InvalidEntity(_)) |
+            AppError::StoreError(store::StoreError::UnexpectedIndex{..}) |
+            AppError::StoreError(store::StoreError::LockError) |
             AppError::NullValue =>
                 hyper::StatusCode::BadRequest,
             AppError::ParamsError(_) =>
@@ -386,7 +386,7 @@ struct Config {
     data_path: String,
 }
 
-fn start_server(store: Arc<store::Store>, config: &Config) {
+fn start_server(store: Arc<store::StoreWrapper>, config: &Config) {
     let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
 
     info!("Start listen on {} with backlog {}", config.address, config.backlog);
@@ -429,8 +429,10 @@ fn main() {
     };
 
     let options = loader::load_options(&config.data_path).unwrap();
-    let store = Arc::new(store::Store::new(options.generated_at));
-    loader::load_data(&store.clone(), &config.data_path).unwrap();
+    let mut store = store::Store::new(options.generated_at);
+    loader::load_data(&mut store, &config.data_path).unwrap();
 
-    start_server(store.clone(), &config);
+    let store_wrapper = Arc::new(store::StoreWrapper::new(store));
+
+    start_server(store_wrapper.clone(), &config);
 }
