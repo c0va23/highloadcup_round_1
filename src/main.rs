@@ -299,23 +299,6 @@ impl Router {
             _ => None,
         }
     }
-
-    const REQUEST_TIMEOUT: u64 = 5;
-
-    fn timeout(&self) -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        Box::new(
-            future::result(
-                tokio_core::reactor::Timeout::new(
-                    std::time::Duration::new(Self::REQUEST_TIMEOUT, 0),
-                    &self.handler.clone(),
-                )
-            )
-            .map_err(hyper::Error::Io)
-            .and_then(|_|
-                Ok(server::Response::new().with_status(hyper::StatusCode::InternalServerError))
-            )
-        )
-    }
 }
 
 impl server::Service for Router {
@@ -368,9 +351,7 @@ impl server::Service for Router {
             } else {
                 response
             }
-        ).select(self.timeout())
-        .map(|(first, _)| first)
-        .map_err(|(first, _)| first);
+        );
 
         Box::new(result)
     }
