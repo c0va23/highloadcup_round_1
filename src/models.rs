@@ -14,6 +14,11 @@ pub trait Validate {
     fn valid(&self) -> ValidationResult;
 }
 
+#[inline]
+pub fn id_to_index(id: Id) -> usize {
+    id as usize - 1
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: Id,
@@ -22,6 +27,13 @@ pub struct User {
     pub last_name: String,
     pub gender: char,
     pub birth_date: Timestamp,
+}
+
+impl User {
+    #[inline]
+    pub fn index(&self) -> usize {
+        id_to_index(self.id)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -40,6 +52,13 @@ pub struct Location {
     pub country: String,
     pub city: String,
     pub distance: u32,
+}
+
+impl Location {
+    #[inline]
+    pub fn index(&self) -> usize {
+        id_to_index(self.id)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -63,6 +82,23 @@ pub struct Visit {
     pub user: Id,
     pub visited_at: Timestamp,
     pub mark: u8,
+}
+
+impl Visit {
+    #[inline]
+    pub fn index(&self) -> usize {
+        id_to_index(self.id)
+    }
+
+    #[inline]
+    pub fn user_index(&self) -> usize {
+        id_to_index(self.user)
+    }
+
+    #[inline]
+    pub fn location_index(&self) -> usize {
+        id_to_index(self.location)
+    }
 }
 
 #[derive(
