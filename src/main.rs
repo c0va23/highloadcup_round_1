@@ -44,6 +44,9 @@ mod store;
 mod loader;
 
 const STREAM_KEEPALIVE_SECS: Option<u64> = Some(30);
+const STREAM_LINGER_SECS: Option<u64> = Some(5);
+const STREAM_SEND_BUFFER_SIZE: usize = 256 * 1024;
+const STREAM_RECV_BUFFER_SIZE: usize = 256 * 1024;
 
 #[derive(Debug)]
 enum AppError {
@@ -368,7 +371,8 @@ struct Config {
 }
 
 fn start_server(store: Arc<store::StoreWrapper>, config: &Config) {
-    let keepalive = STREAM_KEEPALIVE_SECS.map(|secs| time::Duration::new(secs, 0));
+    let keepalive = STREAM_KEEPALIVE_SECS.map(time::Duration::from_secs);
+    let linger = STREAM_LINGER_SECS.map(time::Duration::from_secs);
 
     info!("Start listen on {} with backlog {}", config.address, config.backlog);
 
@@ -386,8 +390,18 @@ fn start_server(store: Arc<store::StoreWrapper>, config: &Config) {
 
     core.run(
         core_listener.incoming().for_each(move |(stream, socket_addr)| {
+            debug!("Keepalive: {:?}", stream.keepalive().unwrap());
+            debug!("Linger: {:?}", stream.linger().unwrap());
+            debug!("Nodelay: {}", stream.nodelay().unwrap());
+            debug!("Send buffer size: {}", stream.send_buffer_size().unwrap());
+            debug!("Recv buffer size: {}", stream.recv_buffer_size().unwrap());
+
             stream.set_keepalive(keepalive).unwrap();
+            stream.set_linger(linger).unwrap();
             stream.set_nodelay(true).unwrap();
+            stream.set_send_buffer_size(STREAM_SEND_BUFFER_SIZE).unwrap();
+            stream.set_recv_buffer_size(STREAM_RECV_BUFFER_SIZE).unwrap();
+
             info!("Connection from {}", socket_addr);
             let router = Router::new(store.clone(), handle.clone());
             hyper::server::Http::new()
