@@ -27,6 +27,7 @@ use std::env;
 use std::str;
 use std::sync::Arc;
 use std::time;
+use std::thread;
 
 use hyper::server;
 use hyper::mime;
@@ -363,11 +364,13 @@ impl server::Service for Router {
 const DEFAULT_LISTEN: &'static str = "127.0.0.1:9999";
 const DEFAULT_BACKLOG: &'static str = "1024";
 const DEFAULT_DATA_PATH: &'static str = "data";
+const DEFAULT_THREADS: &'static str = "4";
 
 struct Config {
     address: std::net::SocketAddr,
     backlog: i32,
     data_path: String,
+    threads: usize,
 }
 
 fn start_server(store: Arc<store::StoreWrapper>, config: &Config) {
@@ -415,13 +418,15 @@ fn start_server(store: Arc<store::StoreWrapper>, config: &Config) {
 fn main() {
     env_logger::init().unwrap();
 
-    let config = Config {
+    let config = Arc::new(Config {
         address: env::var("LISTEN").unwrap_or(DEFAULT_LISTEN.to_string())
             .parse().unwrap(),
         backlog: env::var("BACKLOG").unwrap_or(DEFAULT_BACKLOG.to_string())
             .parse::<i32>().unwrap(),
         data_path: env::var("DATA_PATH").unwrap_or(DEFAULT_DATA_PATH.to_string()),
-    };
+        threads: env::var("THREADS").unwrap_or(DEFAULT_THREADS.to_string())
+            .parse::<usize>().unwrap(),
+    });
 
     let options = loader::load_options(&config.data_path).unwrap();
     let mut store = store::Store::new(options.generated_at);
@@ -429,5 +434,18 @@ fn main() {
 
     let store_wrapper = Arc::new(store::StoreWrapper::new(store));
 
-    start_server(store_wrapper.clone(), &config);
+    let threads = (0..config.threads).map(|thread_index| {
+        let store_wrapper = store_wrapper.clone();
+        let config = config.clone();
+        thread::Builder::new()
+            .name(format!("Server thread {}", thread_index))
+            .spawn(move ||
+                start_server(store_wrapper, &config)
+            )
+            .unwrap()
+    });
+
+    for thread in threads {
+        thread.join().unwrap()
+    }
 }
