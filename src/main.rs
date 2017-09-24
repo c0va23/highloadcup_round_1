@@ -17,6 +17,7 @@ extern crate tokio_core;
 extern crate zip;
 
 extern crate chrono;
+extern crate fnv;
 
 #[cfg(test)]
 #[macro_use]
@@ -106,7 +107,6 @@ impl Router {
                 hyper::StatusCode::BadRequest,
             AppError::StoreError(store::StoreError::EntryExists) |
             AppError::StoreError(store::StoreError::InvalidEntity(_)) |
-            AppError::StoreError(store::StoreError::UnexpectedIndex{..}) |
             AppError::StoreError(store::StoreError::LockError) |
             AppError::NullValue =>
                 hyper::StatusCode::BadRequest,

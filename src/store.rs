@@ -4,20 +4,19 @@ use std::sync::{
 };
 
 use chrono::prelude::*;
+use fnv;
 
 use super::models::*;
 
 const AVG_ACCURACY: f64 = 5.0_f64;
+
+type Hash<Value> = fnv::FnvHashMap<Id, Value>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum StoreError {
     EntryExists,
     EntityNotExists,
     InvalidEntity(ValidationError),
-    UnexpectedIndex {
-        vec_len: usize,
-        new_index: usize,
-    },
     LockError,
 }
 
@@ -29,9 +28,9 @@ impl<Guard> From<PoisonError<Guard>> for StoreError {
 
 pub struct Store {
     now: DateTime<Utc>,
-    users: Vec<(User, Vec<(usize, usize)>)>,
-    locations: Vec<(Location, Vec<(usize, usize)>)>,
-    visits: Vec<Visit>,
+    users: Hash<(User, Vec<(Id, Id)>)>, // (Visit.id, Location.id)
+    locations: Hash<(Location, Vec<(Id, Id)>)>, // (Visit.id, User.id)
+    visits: Hash<Visit>,
 }
 
 impl Store {
@@ -42,53 +41,37 @@ impl Store {
         );
         Self {
             now: now,
-            users: Vec::new(),
-            locations: Vec::new(),
-            visits: Vec::new(),
+            users: Hash::default(),
+            locations: Hash::default(),
+            visits: Hash::default(),
         }
     }
 
     pub fn get_user(&self, id: Id) -> Result<User, StoreError> {
-        let user_index = id_to_index(id);
-        if self.users.len() > user_index {
-            Ok(self.users[user_index].0.clone())
-        } else {
-            Err(StoreError::EntityNotExists)
-        }
+        self.users.get(&id)
+            .map(|&(ref u, _)| u.clone())
+            .ok_or(StoreError::EntityNotExists)
     }
 
     pub fn add_user(&mut self, user: User) -> Result<Empty, StoreError> {
         debug!("Add user {:?}", user);
 
-        let user_index = id_to_index(user.id);
-        if self.users.len() > user_index {
+        if self.users.get(&user.id).is_some() {
             return Err(StoreError::EntryExists)
-        }
-
-        if self.users.len() != user_index {
-            return Err(StoreError::UnexpectedIndex{
-                new_index: user_index,
-                vec_len: self.users.len(),
-            })
         }
 
         if let Err(error) = user.valid() {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        self.users.push((user, Vec::new()));
+        self.users.insert(user.id, (user, Vec::new()));
         Ok(Empty{})
     }
 
     pub fn update_user(&mut self, id: Id, user_data: UserData) -> Result<Empty, StoreError> {
         debug!("Update user {} {:?}", id, user_data);
-        let user_index = id_to_index(id);
-
-        if self.users.len() < user_index {
-            return Err(StoreError::EntityNotExists)
-        }
-
-        let mut updated_user = self.users[user_index].0.clone();
+        let user_record = self.users.get_mut(&id).ok_or(StoreError::EntityNotExists)?;
+        let mut updated_user = user_record.0.clone();
 
         if let Some(email) = user_data.email {
             updated_user.email = email;
@@ -109,54 +92,39 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        self.users[user_index].0 = updated_user;
+        user_record.0 = updated_user;
 
         Ok(Empty{})
     }
 
     pub fn get_location(&self, id: Id) -> Result<Location, StoreError> {
-        let location_index = id_to_index(id);
-        if self.locations.len() > location_index {
-            Ok(self.locations[location_index].0.clone())
-        } else {
-            Err(StoreError::EntityNotExists)
-        }
+        self.locations.get(&id)
+            .map(|&(ref l, _)| l.clone())
+            .ok_or(StoreError::EntityNotExists)
     }
 
     pub fn add_location(&mut self, location: Location) -> Result<Empty, StoreError> {
         debug!("Add location {:?}", location);
 
-        let location_index = location.index();
-
-        if self.locations.len() > location_index {
+        if self.locations.get(&location.id).is_some() {
             return Err(StoreError::EntryExists)
-        }
-
-        if self.locations.len() != location_index {
-            return Err(StoreError::UnexpectedIndex {
-                new_index: location_index,
-                vec_len: self.locations.len(),
-
-            })
         }
 
         if let Err(error) = location.valid() {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        self.locations.push((location, Vec::new()));
+        self.locations.insert(location.id, (location, Vec::new()));
         Ok(Empty{})
     }
 
     pub fn update_location(&mut self, id: Id, location_data: LocationData) -> Result<Empty, StoreError> {
         debug!("Update location {} {:?}", id, location_data);
-        let location_index = id_to_index(id);
-        if self.locations.len() < location_index {
-            return Err(StoreError::EntityNotExists)
-        }
 
-        let location = &mut self.locations[location_index];
-        let mut updated_location = location.0.clone();
+        let location_record = self.locations.get_mut(&id)
+            .ok_or(StoreError::EntityNotExists)?;
+
+        let mut updated_location = location_record.0.clone();
 
         if let Some(distance) = location_data.distance {
             updated_location.distance = distance;
@@ -175,135 +143,122 @@ impl Store {
             return Err(StoreError::InvalidEntity(error))
         }
 
-        location.0 = updated_location;
+        location_record.0 = updated_location;
 
         Ok(Empty{})
     }
 
     pub fn get_visit(&self, visit_id: Id) -> Result<Visit, StoreError> {
-        let visit_index = id_to_index(visit_id);
-        if self.visits.len() > visit_index {
-            Ok(self.visits[visit_index].clone())
-        } else {
-            Err(StoreError::EntityNotExists)
-        }
+        self.visits.get(&visit_id)
+            .map(|v| v.clone())
+            .ok_or(StoreError::EntityNotExists)
     }
 
     fn add_visit_to_user(
         &mut self,
         visit: &Visit,
         location: &Location,
-    ) {
+    ) -> Result<(), StoreError> {
         let position = {
-            let user_visits = &self.users[visit.user_index()].1;
+            let user_visits = &self.users.get(&visit.user)
+                .ok_or(StoreError::EntityNotExists)?.1;
 
-            user_visits.iter().position(|&(visit_index, _)|
-                visit.visited_at < self.visits[visit_index].visited_at
-            )
+            user_visits.iter()
+                .map(|&(visit_id, _)|
+                    self.visits
+                        .get(&visit_id)
+                        .map(|v| v.visited_at)
+                )
+                .collect::<Option<Vec<Timestamp>>>()
+                .ok_or(StoreError::EntityNotExists)?
+                .into_iter()
+                .position(|visited_at| visit.visited_at < visited_at)
         };
 
-        let pair = (visit.index(), location.index());
+        let user_visits = &mut self.users.get_mut(&visit.user)
+            .ok_or(StoreError::EntityNotExists)?.1;
 
-        let user_visits = &mut self.users[visit.user_index()].1;
+        let pair = (visit.id, location.id);
 
         match position {
             Some(position) => user_visits.insert(position, pair),
             None => user_visits.push(pair),
         }
+
+        Ok(())
     }
 
     fn remove_visit_from_user(
         &mut self,
         visit: &Visit,
-    ) {
-        let position = {
-            let user_visits = &self.users[visit.user_index()].1;
+    ) -> Result<(), StoreError> {
+        let user_visits = &mut self.users
+            .get_mut(&visit.user)
+            .ok_or(StoreError::EntityNotExists)?
+            .1;
 
-            let visit_index = visit.index();
-            user_visits.iter().position(|&(index, _)|
-                visit_index == index
-            )
-        };
+        user_visits.retain(|&(visit_id, _)| visit_id != visit.id);
 
-        let user_visits = &mut self.users[visit.user_index()].1;
-
-        if let Some(position) = position {
-            user_visits.remove(position);
-        } else {
-            error!("Visit {} not found on user {}", visit.id, visit.user);
-        }
+        Ok(())
     }
 
     fn add_visit_to_location(
         &mut self,
         visit: &Visit,
         user: &User,
-    ) {
-        let location_visits = &mut self.locations[visit.location_index()].1;
+    ) -> Result<(), StoreError> {
+        let location_visits = &mut self.locations
+            .get_mut(&visit.location)
+            .ok_or(StoreError::EntityNotExists)?
+            .1;
 
-        location_visits.push((visit.index(), user.index()));
+        location_visits.push((visit.id, user.id));
+
+        Ok(())
     }
 
     fn remove_visit_from_location(
         &mut self,
         visit: &Visit,
-    ) {
-        let position = {
-            let location_visits = &self.locations[visit.location_index()].1;
+    ) -> Result<(), StoreError> {
+        let location_visits = &mut self.locations
+            .get_mut(&visit.location)
+            .ok_or(StoreError::EntityNotExists)?
+            .1;
 
-            let visit_index = visit.index();
-            location_visits.iter().position(|&(index, _)|
-                visit_index == index
-            )
-        };
+        location_visits.retain(|&(visit_id, _)| visit_id != visit.id);
 
-        let location_visits = &mut self.locations[visit.location_index()].1;
-
-        if let Some(position) = position {
-            location_visits.remove(position);
-        } else {
-            error!("Visit {} not found on location {}", visit.id, visit.location);
-        }
+        Ok(())
     }
 
     fn get_visit_user(&self, user_id: Id) -> Result<User, StoreError> {
-        let user_index = id_to_index(user_id);
-        if self.users.len() <= user_index {
-            Err(StoreError::InvalidEntity(ValidationError{
-                field: "user".to_string(),
-                message: format!("User with ID {} not exists", user_id),
-            }))
-        } else {
-            Ok(self.users[user_index].0.clone())
+        match self.users.get(&user_id) {
+            None =>
+                Err(StoreError::InvalidEntity(ValidationError{
+                    field: "user".to_string(),
+                    message: format!("User with ID {} not exists", user_id),
+                })),
+            Some(&(ref user, _)) => Ok(user.clone()),
         }
     }
 
     fn get_visit_location(&self, location_id: Id) -> Result<Location, StoreError> {
-        let location_index = id_to_index(location_id);
-
-        if self.locations.len() <= location_index {
-            Err(StoreError::InvalidEntity(ValidationError{
-                field: "location".to_string(),
-                message: format!("Location with ID {} not exists", location_id),
-            }))
-        } else {
-            Ok(self.locations[location_index].0.clone())
+        match self.locations.get(&location_id) {
+            None =>
+                Err(StoreError::InvalidEntity(ValidationError{
+                    field: "location".to_string(),
+                    message: format!("Location with ID {} not exists", location_id),
+                })),
+            Some(&(ref location, _)) =>
+                Ok(location.clone()),
         }
     }
 
     pub fn add_visit(&mut self, visit: Visit) -> Result<Empty, StoreError> {
         debug!("Add visit {:?}", visit);
 
-        let visit_index = visit.index();
-        if self.visits.len() > visit_index {
+        if self.visits.get(&visit.id).is_some() {
             return Err(StoreError::EntryExists)
-        }
-
-        if self.visits.len() != visit_index {
-            return Err(StoreError::UnexpectedIndex {
-                new_index: visit_index,
-                vec_len: self.visits.len(),
-            })
         }
 
         if let Err(error) = visit.valid() {
@@ -313,10 +268,10 @@ impl Store {
         let user = self.get_visit_user(visit.user)?;
         let location = self.get_visit_location(visit.location)?;
 
-        self.add_visit_to_user(&visit, &location);
-        self.add_visit_to_location(&visit, &user);
+        self.add_visit_to_user(&visit, &location)?;
+        self.add_visit_to_location(&visit, &user)?;
 
-        self.visits.push(visit);
+        self.visits.insert(visit.id, visit);
 
         Ok(Empty{})
     }
@@ -324,12 +279,11 @@ impl Store {
     pub fn update_visit(&mut self, id: Id, visit_data: VisitData) -> Result<Empty, StoreError> {
         debug!("Update visit {} {:?}", id, visit_data);
 
-        let visit_index = id_to_index(id);
-        if self.visits.len() <= visit_index {
-            return Err(StoreError::EntityNotExists)
-        }
-
-        let original_visit = self.visits[visit_index].clone();
+        let original_visit = self.visits
+            .get(&id)
+            .ok_or(StoreError::EntityNotExists)?
+            .clone()
+        ;
 
         debug!("Original visit {:?}", original_visit);
 
@@ -357,19 +311,19 @@ impl Store {
         let user = self.get_visit_user(updated_visit.user)?.clone();
 
         debug!("Replace visit {:?} wiht {:?}", original_visit, updated_visit);
-        self.visits[visit_index] = updated_visit.clone();
+        *self.visits.get_mut(&id).unwrap() = updated_visit.clone();
 
         if original_visit.user != updated_visit.user ||
                 original_visit.visited_at != updated_visit.visited_at ||
                 original_visit.location != updated_visit.location {
             debug!("Update visit user from {} to {}", original_visit.user, updated_visit.user);
-            self.remove_visit_from_user(&original_visit);
-            self.add_visit_to_user(&updated_visit, &location);
+            self.remove_visit_from_user(&original_visit)?;
+            self.add_visit_to_user(&updated_visit, &location)?;
         }
         if original_visit.location != updated_visit.location || original_visit.user != updated_visit.user {
             debug!("Update visit locatoin from {} to {}", original_visit.location, updated_visit.location);
-            self.remove_visit_from_location(&original_visit);
-            self.add_visit_to_location(&updated_visit, &user);
+            self.remove_visit_from_location(&original_visit)?;
+            self.add_visit_to_location(&updated_visit, &user)?;
         }
 
         Ok(Empty{})
@@ -379,16 +333,21 @@ impl Store {
             Result<UserVisits, StoreError> {
         debug!("Get user {} visits by {:?}", user_id, options);
 
-        let user_index = id_to_index(user_id);
-        if self.users.len() <= user_index {
-            return Err(StoreError::EntityNotExists)
-        }
+        let user_record = self.users.get(&user_id)
+            .ok_or(StoreError::EntityNotExists)?;
 
-        let user_visits = self.users[user_index].1
+        let user_visits = user_record.1
             .iter()
-            .map(|&(visit_index, location_index)|
-                (self.visits[visit_index].clone(), self.locations[location_index].0.clone())
+            .map(|&(visit_id, location_id)|
+                self.visits.get(&visit_id).and_then(|visit|
+                    self.locations.get(&location_id).map(|&(ref location, _)|
+                        (visit.clone(), location.clone())
+                    )
+                )
             )
+            .collect::<Option<Vec<(Visit, Location)>>>()
+            .ok_or(StoreError::EntityNotExists)?
+            .into_iter()
             .filter(|&(ref v, ref l)| {
                 (if let Some(from_date) = options.from_date { from_date < v.visited_at  } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
@@ -413,12 +372,9 @@ impl Store {
             Result<LocationRate, StoreError> {
         debug!("Find location {} avg by {:?}", location_id, options);
 
-        let location_index = id_to_index(location_id);
-        if self.locations.len() <= location_index {
-            return Err(StoreError::EntityNotExists)
-        }
-
-        let location_visits = &self.locations[location_index].1;
+        let location_visits = &self.locations.get(&location_id)
+            .ok_or(StoreError::EntityNotExists)?
+            .1;
 
         debug!("Location visits: {:?}", location_visits);
 
@@ -434,18 +390,26 @@ impl Store {
             .map(|t| t.timestamp());
         debug!("Age to {:?}", to_age);
 
-        let filtered_location_visits = location_visits
+       let filtered_location_visits: Vec<(Visit, User)>  = location_visits
             .iter()
-            .map(|&(visit_index, user_index)|
-                (self.visits[visit_index].clone(), self.users[user_index].0.clone())
+            .map(|&(visit_id, user_id)|
+                self.visits.get(&visit_id).and_then(|visit|
+                    self.users.get(&user_id).map(|&(ref user, _)|
+                        (visit.clone(), user.clone())
+                    )
+                )
             )
+            .collect::<Option<Vec<(Visit, User)>>>()
+            .ok_or(StoreError::EntityNotExists)?
+            .into_iter()
             .filter(|&(ref v, ref u)| {
                 (if let Some(from_date) = options.from_date { v.visited_at > from_date } else { true })
                 && if let Some(to_date) = options.to_date { v.visited_at < to_date } else { true }
                 && if let Some(gender) = options.gender { u.gender == gender } else { true }
                 && if let Some(from_age) = from_age { u.birth_date < from_age } else { true }
                 && if let Some(to_age) = to_age { u.birth_date > to_age } else { true }
-            }).collect::<Vec<(Visit, User)>>();
+            })
+            .collect::<Vec<(Visit, User)>>();
 
         debug!("Filtered location vistis: {:?}", filtered_location_visits);
 
@@ -813,10 +777,10 @@ mod tests {
         store.add_location(new_location.clone()).unwrap();
 
         let old_visit = Visit { id: 1, location: old_location.id, user: user.id, visited_at: 1, mark: 3 };
-        store.add_visit(old_visit.clone()).unwrap();
+        assert_eq!(store.add_visit(old_visit.clone()), Ok(Empty{}));
 
         let new_visit = Visit { id: 2, location: new_location.id, user: user.id, visited_at: 2, mark: 4 };
-        store.add_visit(new_visit.clone()).unwrap();
+        assert_eq!(store.add_visit(new_visit.clone()), Ok(Empty{}));
 
         let visit_data = VisitData {
             visited_at: Some(3),
@@ -1049,7 +1013,7 @@ mod tests {
                 mark: 5,
                 visited_at: 0,
             };
-            store.add_visit(visit).unwrap();
+            assert_eq!(store.add_visit(visit), Ok(Empty{}));
         }
 
         assert_eq!(store.get_location_avg(location.id, Default::default()), Ok(LocationRate{ avg: 5.0 }));
