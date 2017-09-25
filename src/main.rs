@@ -101,7 +101,7 @@ impl Router {
     }
 
     fn not_found() -> Box<Future<Item = server::Response, Error = hyper::Error>> {
-        future::ok(server::Response::new().with_status(hyper::StatusCode::NotFound)).boxed()
+        Box::new(future::ok(server::Response::new().with_status(hyper::StatusCode::NotFound)))
     }
 
     fn app_error(err: AppError) -> server::Response {
